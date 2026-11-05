@@ -1,0 +1,10 @@
+# Données et résultats : jamais dans le dépôt
+data/
+resultats/
+*.csv
+*.xlsx
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
