@@ -2,8 +2,6 @@
 
 Backtest du moteur momentum de la stratégie « Socle & Moteur » v0.1, pour l'Euronext Trading Game 2026-2027.
 
-**Dépôt privé pendant la compétition (jusqu'au 09/04/2027).** Il décrit la stratégie de l'équipe : ne pas le rendre public sans l'accord du Portfolio Manager.
-
 ## Règles testées
 
 - Univers : 10 ETF sectoriels européens capitalisants.
