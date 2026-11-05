@@ -102,7 +102,7 @@ for nom, d, debut in (("9 secteurs 2008-2026", d9, D(2008, 7, 4)), ("10 ETF 2024
 # 6. Par sous-période et par choc (9 secteurs)
 r = backtest(d9, BASE, D(2008, 7, 4), FIN)
 per = {}
-for lib, a, b in (("2008-2012", D(2008, 7, 4), D(2012, 12, 31)), ("2013-2017", D(2013, 1, 1), D(2017, 12, 31)), ("2018-2023", D(2018, 1, 1), D(2023, 12, 31)), ("2024-2026", D(2024, 1, 1), FIN)):
+for lib, a, b in (("2008-2012", D(2008, 7, 4), D(2012, 12, 31)), ("2013-2017", D(2013, 1, 1), D(2017, 12, 31)), ("2018-2023", D(2018, 1, 1), D(2023, 12, 31)), ("2024-2026", D(2024, 1, 6), FIN)):
     x = [v for v, t in zip(r["rendements"], r["dates"]) if a <= t <= b]
     y = [v for v, t in zip(r["rendements_reference"], r["dates"]) if a <= t <= b]
     per[lib] = {"moteur": court(mesures(x)), "STOXX": court(mesures(y))}
