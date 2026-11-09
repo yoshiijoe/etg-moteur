@@ -132,3 +132,25 @@ def test_portefeuille_sans_mouvement_ne_bouge_pas():
     d = donnees([0.0] * 4, n=60)
     r = simuler(d, Parametres(top=1, tampon=1, filtre=False), d.dates[40], d.dates[59])
     assert r["portefeuille"]["perf"] == pytest.approx(0) and r["perf"] == pytest.approx(0)
+
+
+def test_dernier_vendredi_du_mois():
+    from etg_moteur.application import dernier_vendredi
+    assert dernier_vendredi(2026, 11) == dt.date(2026, 11, 27)
+    assert dernier_vendredi(2026, 10) == dt.date(2026, 10, 30)
+    assert dernier_vendredi(2027, 1) == dt.date(2027, 1, 29)
+
+
+def test_decision_garde_une_ligne_dans_la_zone_tampon():
+    from etg_moteur.application import decision
+    d = donnees([.01, .009, .008, .007, .006, .005, .004, .003, .002, .001])
+    res = decision(d, Parametres(), 79, {"E5"})
+    actions = {l["etf"]: l["action"] for l in res["lignes"]}
+    assert actions["E5"] == "garder" and actions["E0"] == "acheter" and actions["E3"] == "—"
+    assert sum(1 for l in res["lignes"] if l["retenu"]) == 4
+
+
+def test_decision_refuse_un_etf_inconnu():
+    from etg_moteur.application import decision
+    with pytest.raises(ValueError):
+        decision(donnees([.01] * 4), Parametres(), 79, {"Inconnu"})

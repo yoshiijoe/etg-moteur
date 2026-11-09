@@ -26,6 +26,15 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
+Pour savoir ce que la règle demande ce mois-ci, à partir des détentions actuelles :
+
+```bash
+.venv/bin/python scripts/construire_prix.py 2026-11-27
+.venv/bin/python scripts/signal_du_mois.py --detenus "Santé,Technologie,Pétrole & gaz,Agroalimentaire"
+```
+
+Avant le dernier vendredi du mois, le résultat n'est qu'un aperçu.
+
 `lancer_tests.py` écrit ses résultats dans `resultats/rapport.json`. Pour comparer le moteur au classeur Excel de l'équipe, enregistré par Excel :
 
 ```bash
@@ -38,6 +47,7 @@ python3 -m venv .venv
 |---|---|
 | `src/etg_moteur/moteur.py` | Règles du moteur et mesures |
 | `src/etg_moteur/portefeuille.py` | Dérive des poids, règle de mi-mois, contrôles UCITS |
+| `src/etg_moteur/application.py` | Décision du mois à partir des détentions |
 | `src/etg_moteur/robustesse.py` | Sensibilité, hors échantillon, sélection glissante, bootstrap |
 | `tests/test_moteur.py` | Tests des règles sur des prix synthétiques |
 | `docs/protocole.md` | Brouillon du protocole de backtest |
