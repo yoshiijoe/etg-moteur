@@ -1,0 +1,15 @@
+# Jamais déployés : données, résultats, environnement local, tests et brouillons
+data
+resultats
+.venv
+venv
+tests
+docs
+scripts
+.pytest_cache
+.dev-stockage
+__pycache__
+*.csv
+*.xlsx
+.claude
+.env*

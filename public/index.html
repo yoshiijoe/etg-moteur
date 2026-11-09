@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Moteur ETG</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23FF5B00'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<script src="/theme.js"></script>
+</head>
+<body>
+<header class="barre">
+  <div class="barre-contenu">
+    <span class="marque">Moteur ETG</span>
+    <div class="barre-droite">
+      <span id="etat-prix" class="etat-prix">Prix : chargement</span>
+      <button id="theme" class="bouton discret" type="button" aria-label="Basculer entre thème clair et sombre">Clair / sombre</button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <section id="connexion" class="bloc" hidden>
+    <h1>Accès réservé</h1>
+    <form id="form-connexion" class="ligne-form">
+      <label for="motdepasse">Mot de passe</label>
+      <input id="motdepasse" name="motdepasse" type="password" autocomplete="current-password" required>
+      <button class="bouton principal" type="submit">Entrer</button>
+    </form>
+    <p id="message-connexion" class="message" role="status"></p>
+  </section>
+
+  <div id="application" hidden>
+    <section class="actions" aria-label="Actions">
+      <div class="actions-boutons">
+        <button id="b-prix" class="bouton" type="button">Mettre à jour les prix</button>
+        <button id="b-backtest" class="bouton principal" type="button">Lancer le backtest</button>
+        <button id="b-excel" class="bouton" type="button">Télécharger l'Excel</button>
+        <button id="b-import" class="bouton discret" type="button">Importer un CSV</button>
+        <input id="fichier-csv" type="file" accept=".csv,text/csv" hidden>
+      </div>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="bloc" aria-labelledby="t-decision">
+      <h1 id="t-decision">Décision du mois</h1>
+      <p id="apercu" class="apercu" hidden></p>
+      <div class="ligne-info">
+        <span id="date-decision" class="info"></span>
+        <label class="champ-inline">Vendredi utilisé
+          <input id="vendredi" type="date" aria-describedby="aide-vendredi">
+        </label>
+      </div>
+      <p id="aide-vendredi" class="aide">Vide : le dernier vendredi disponible.</p>
+      <div class="defile">
+        <table id="table-decision">
+          <thead><tr><th class="num">Rang</th><th>ETF</th><th class="num" id="th-court">3 mois</th><th class="num" id="th-long">6 mois</th><th class="num">Signal</th><th>Détenu</th><th>Décision</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <fieldset class="detenus">
+        <legend>ETF détenus actuellement</legend>
+        <div id="detenus" class="cases"></div>
+      </fieldset>
+      <p id="resume-refuges" class="aide"></p>
+    </section>
+
+    <section class="bloc" aria-labelledby="t-backtest">
+      <h1 id="t-backtest">Backtest</h1>
+      <details id="parametres" class="parametres">
+        <summary>Paramètres</summary>
+        <form id="form-parametres" class="grille-form">
+          <label>Début <input name="debut" type="date" value="2024-01-05" required></label>
+          <label>Fin <input name="fin" type="date"></label>
+          <label>Univers
+            <select name="univers"><option value="10">10 ETF</option><option value="9">9 ETF, sans la Défense</option></select>
+          </label>
+          <label>Court (semaines) <input name="court" type="number" min="1" max="104" value="13" required></label>
+          <label>Long (semaines) <input name="long" type="number" min="2" max="104" value="26" required></label>
+          <label>Lignes retenues <input name="top" type="number" min="1" max="10" value="4" required></label>
+          <label>Zone tampon (rang) <input name="tampon" type="number" min="1" max="10" value="6" required></label>
+          <label class="case"><input name="utiliser_court" type="checkbox" checked> Signal court terme</label>
+          <label class="case"><input name="filtre" type="checkbox" checked> Filtre de signal négatif</label>
+        </form>
+      </details>
+
+      <p id="vide-backtest" class="aide">Lancer le backtest pour afficher les résultats.</p>
+      <div id="resultats" hidden>
+        <p id="periode" class="info"></p>
+        <div class="chiffres" id="chiffres"></div>
+        <h2>Valeur en base 100</h2>
+        <div class="legende"><span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600</div>
+        <div id="graphique-valeur" class="graphique" role="img" aria-label="Valeur du moteur et du STOXX 600 en base 100"></div>
+        <h2>Perte depuis le sommet</h2>
+        <div id="graphique-perte" class="graphique" role="img" aria-label="Perte du moteur depuis son plus haut"></div>
+        <h2>Variantes</h2>
+        <div class="defile"><table id="table-variantes"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <p id="pied-source">Source des prix : Yahoo Finance.</p>
+    <ul class="avertissements">
+      <li>Les prix viennent de Yahoo Finance et n'ont pas été validés par l'équipe.</li>
+      <li>La Défense n'a pas de données avant 07/2023.</li>
+      <li>Avant leur lancement, les ETF sont prolongés par un fonds proche. Résultats passés, hors frais et fiscalité.</li>
+    </ul>
+    <p><a href="https://github.com/yoshiijoe/etg-moteur" rel="noopener noreferrer">Dépôt GitHub</a></p>
+  </div>
+</footer>
+<script src="/app.js"></script>
+</body>
+</html>
