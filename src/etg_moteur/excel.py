@@ -4,10 +4,13 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import math
 
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
 from openpyxl.chart.series import SeriesLabel
+from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -142,8 +145,10 @@ def _serie(wb: Workbook, bt: dict) -> None:
     ws = wb.create_sheet("Serie")
     s = bt["series"]
     _entetes(ws, 1, ["Date", "Moteur (base 100)", "STOXX 600 (base 100)", "Perte du moteur depuis le sommet",
-                     "Perte du STOXX 600 depuis le sommet"], [14, 20, 22, 30, 32])
-    ws.auto_filter.ref = f"A1:E{len(s['dates']) + 1}"
+                     "Perte du STOXX 600 depuis le sommet", "Mois (axe des graphiques)"], [14, 20, 22, 30, 32, 14])
+    ws.auto_filter.ref = f"A1:F{len(s['dates']) + 1}"
+    for i, x in enumerate(s["dates"]):
+        ws.cell(i + 2, 6, f"{_date(x):%m/%Y}")
     for i, x in enumerate(s["dates"]):
         ws.cell(i + 2, 1, _date(x)).number_format = FORMAT_DATE
         ws.cell(i + 2, 2, s["moteur"][i]).number_format = "0.00"
@@ -293,7 +298,7 @@ def _tableau_de_bord(wb: Workbook, bt: dict, dec: dict, etat: dict) -> tuple:
             ws.cell(ligne + k, j).border = TRAIT
     ligne += len(CHIFFRES_CLES) + 2
     ancre_graphiques = ligne
-    ligne += 36  # place des deux graphiques
+    ligne += 37  # place des deux graphiques et de leurs titres
 
     ws.cell(ligne, 1, "Variantes").font = SOUS_TITRE
     ligne += 1
@@ -319,22 +324,44 @@ def _tableau_de_bord(wb: Workbook, bt: dict, dec: dict, etat: dict) -> tuple:
         ligne += 1
     for col, largeur in zip("ABCDEFGHIJK", (8, 24, 14, 18, 14, 12, 14, 16, 16, 16, 18)):
         ws.column_dimensions[col].width = largeur
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
     return ws, ancre_graphiques
 
 
+def _bornes(valeurs: list, jusqu_a_zero: bool) -> tuple[float, float, float]:
+    """Graduations « rondes » (1, 2, 2,5, 5 × 10^k) autour des données, comme les graphiques du site."""
+    mini, maxi = min(valeurs), max(valeurs)
+    if jusqu_a_zero:
+        maxi = 0.0
+    brut = (maxi - mini) / 4 or 1
+    puissance = 10 ** math.floor(math.log10(brut))
+    pas = next(k * puissance for k in (1, 2, 2.5, 5, 10) if k * puissance >= brut)
+    return math.floor(mini / pas) * pas, math.ceil(maxi / pas) * pas, pas
+
+
 def _graphiques(ws, ws_serie, ancre: int, n: int) -> None:
-    """Deux courbes natives Excel, comme sur le site : moteur en orange, STOXX 600 en gris."""
-    dates = Reference(ws_serie, min_col=1, min_row=2, max_row=n + 1)
-    for titre, colonnes, format_axe, ligne in (("Valeur en base 100", (2, 3), "0", ancre),
-                                               ("Perte depuis le plus haut", (4, 5), "0%", ancre + 18)):
+    """Les deux courbes du site, en graphiques Excel natifs : moteur en orange, STOXX 600 en gris."""
+    mois = Reference(ws_serie, min_col=6, min_row=2, max_row=n + 1)
+    for titre, colonnes, format_axe, ligne, jusqu_a_zero in (
+            ("Valeur en base 100", (2, 3), "0", ancre, False),
+            ("Perte depuis le sommet", (4, 5), "0%", ancre + 18, True)):
+        ws.cell(ligne, 1, titre).font = SOUS_TITRE
+        valeurs = [ws_serie.cell(r, c).value for c in colonnes for r in range(2, n + 2)]
+        bas, haut, pas = _bornes(valeurs, jusqu_a_zero)
         g = LineChart()
-        g.title = titre
-        g.height, g.width = 8.5, 24
-        g.legend.position = "b"
+        g.height, g.width = 7.5, 17
+        g.legend.position = "t"
+        g.legend.overlay = False
         g.y_axis.number_format = format_axe
-        g.x_axis.number_format = "mm/yyyy"
+        g.y_axis.scaling.min, g.y_axis.scaling.max, g.y_axis.majorUnit = bas, haut, pas
+        g.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E2E2E2"))
+        g.y_axis.spPr = GraphicalProperties(ln=LineProperties(noFill=True))
         g.x_axis.delete = False
         g.y_axis.delete = False
+        g.x_axis.tickLblSkip = g.x_axis.tickMarkSkip = 13  # un repère par trimestre environ
+        g.x_axis.tickLblPos = "low"
         for col, couleur, nom, epaisseur in ((colonnes[0], ORANGE, "Moteur", 22000),
                                              (colonnes[1], GRIS_COURBE, "STOXX Europe 600", 15000)):
             g.add_data(Reference(ws_serie, min_col=col, min_row=2, max_row=n + 1))
@@ -343,8 +370,9 @@ def _graphiques(ws, ws_serie, ancre: int, n: int) -> None:
             serie.graphicalProperties.line.solidFill = couleur
             serie.graphicalProperties.line.width = epaisseur
             serie.smooth = False
-        g.set_categories(dates)
-        ws.add_chart(g, f"A{ligne}")
+            serie.marker.symbol = "none"
+        g.set_categories(mois)
+        ws.add_chart(g, f"A{ligne + 1}")
 
 
 def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict) -> bytes:

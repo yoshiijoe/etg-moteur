@@ -146,3 +146,10 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
   .barre-droite { gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.aide-parametres { padding: 0 14px; margin: 0 0 8px; }
+.definitions { display: grid; grid-template-columns: minmax(130px, max-content) 1fr; gap: 6px 16px; padding-bottom: 16px; }
+.definitions dt { color: var(--texte); font-weight: 500; }
+.definitions dd { margin: 0; }
+@media (max-width: 520px) { .definitions { grid-template-columns: 1fr; } .definitions dd { margin-bottom: 6px; } }
+.detenus .aide { margin: 8px 0 0; }

@@ -66,14 +66,16 @@
       <fieldset class="detenus">
         <legend>ETF détenus actuellement</legend>
         <div id="detenus" class="cases"></div>
+        <p class="aide">Ces cases servent seulement à la décision du mois : cochez les ETF que l'équipe détient vraiment, normalement 4. Le backtest n'en tient pas compte, car il choisit lui-même ses ETF chaque mois depuis sa date de début.</p>
       </fieldset>
       <p id="resume-refuges" class="aide"></p>
     </section>
 
     <section class="bloc" aria-labelledby="t-backtest">
       <h1 id="t-backtest">Backtest</h1>
-      <details id="parametres" class="parametres">
-        <summary>Paramètres</summary>
+      <details id="parametres" class="parametres" open>
+        <summary>Paramètres du backtest</summary>
+        <p class="aide aide-parametres">Le backtest et la décision du mois se recalculent dès qu'un paramètre change.</p>
         <form id="form-parametres" class="grille-form">
           <label>Début <input name="debut" type="date" value="2024-01-05" required></label>
           <label>Fin <input name="fin" type="date"></label>
@@ -87,6 +89,14 @@
           <label class="case"><input name="utiliser_court" type="checkbox" checked> Signal court terme</label>
           <label class="case"><input name="filtre" type="checkbox" checked> Filtre de signal négatif</label>
         </form>
+        <dl class="aide aide-parametres definitions">
+          <dt>Court et long</dt><dd>Durées, en semaines, sur lesquelles on mesure la performance de chaque ETF. 13 semaines font environ 3 mois, 26 environ 6 mois. Le signal est la moyenne des deux.</dd>
+          <dt>Signal court terme</dt><dd>Décoché : seule la durée longue compte.</dd>
+          <dt>Lignes retenues</dt><dd>Nombre d'ETF achetés chaque mois, à poids égaux.</dd>
+          <dt>Zone tampon</dt><dd>Un ETF déjà détenu est gardé tant qu'il reste dans ce rang. Mettre la même valeur que les lignes retenues pour la supprimer.</dd>
+          <dt>Filtre</dt><dd>Un ETF retenu dont le signal est négatif est remplacé par un fonds monétaire, puis par du cash.</dd>
+          <dt>Univers</dt><dd>Sans la Défense, le test peut commencer bien avant 2024, car ses données manquent avant 07/2023.</dd>
+        </dl>
       </details>
 
       <p id="vide-backtest" class="aide">Lancer le backtest pour afficher les résultats.</p>
