@@ -130,7 +130,7 @@ def test_import_csv_invalide(connecte):
 
 
 def test_mise_a_jour_yahoo_bloque(connecte, monkeypatch):
-    erreurs = {s: f"{s} : Yahoo a répondu HTTP 429" for s in ("A", "B")}
+    erreurs = {s: f"{s} : Yahoo a répondu HTTP 429" for s in ("BNK.PA", "ENRG.PA")}
     monkeypatch.setattr(prix, "telecharger", lambda *a, **k: ({}, erreurs))
     r = connecte.post("/api/prix")
     assert r.status_code == 502

@@ -18,7 +18,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from etg_moteur import excel, prix, service, session, stockage
+from etg_moteur import excel, prix, prix_portefeuille, service, session, stockage
 from etg_moteur.univers import SYMBOLES
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -108,21 +108,37 @@ def etat():
 
 
 def mettre_a_jour_prix() -> dict:
-    """Télécharge Yahoo, reconstruit le CSV hebdomadaire et le range dans le stockage."""
-    bruts, erreurs = prix.telecharger(SYMBOLES, pause=0.3, paralleles=4)
-    if erreurs:
-        blocage = any("403" in m or "429" in m for m in erreurs.values())
-        detail = " ; ".join(sorted(erreurs.values())[:3])
+    """Télécharge Yahoo, reconstruit le CSV hebdomadaire et le range dans le stockage.
+
+    Les prix des lignes du portefeuille complet sont téléchargés en même temps et rangés à part : si eux seuls
+    échouent, le CSV du moteur est quand même mis à jour et l'état le signale.
+    """
+    a_telecharger = list(dict.fromkeys([*SYMBOLES, *prix_portefeuille.SYMBOLES_PORTEFEUILLE]))
+    bruts, erreurs = prix.telecharger(a_telecharger, pause=0.3, paralleles=4)
+    erreurs_moteur = {s: m for s, m in erreurs.items() if s in SYMBOLES}
+    if erreurs_moteur:
+        blocage = any("403" in m or "429" in m for m in erreurs_moteur.values())
+        detail = " ; ".join(sorted(erreurs_moteur.values())[:3])
         suite = (" Yahoo bloque probablement les serveurs : importer un CSV (bouton « Importer un CSV »)."
                  if blocage else "")
-        raise Erreur(f"Téléchargement Yahoo incomplet ({len(erreurs)} symbole(s) en échec) : {detail}.{suite}", 502)
+        raise Erreur(f"Téléchargement Yahoo incomplet ({len(erreurs_moteur)} symbole(s) en échec) : {detail}.{suite}", 502)
     cours = prix.lire_tous(bruts)
     maintenant = dt.datetime.now(dt.UTC)
     dernier = prix.dernier_vendredi_disponible(cours, maintenant)
     texte, _ = prix.construire_csv(bruts, dernier)
     etat_csv = service.etat_donnees(texte)  # vérifie que le moteur sait lire le fichier
-    etat = stockage.ecrire_prix(stockage.ouvrir(), texte, "yahoo", maintenant)
-    return dict(disponible=True, avertissements=service.AVERTISSEMENTS, **etat, **etat_csv)
+    st = stockage.ouvrir()
+    etat = stockage.ecrire_prix(st, texte, "yahoo", maintenant)
+    pf = dict(ok=False, erreurs=sorted(erreurs.values())[:5])
+    try:
+        document = prix_portefeuille.construire(bruts, dernier, maintenant)
+        pf_etat = stockage.ecrire_version(st, stockage.PREFIXE_PRIX_PORTEFEUILLE, "json",
+                                          prix_portefeuille.en_texte(document).encode("utf-8"), "application/json",
+                                          "yahoo", stockage.CONSERVER, maintenant)
+        pf = dict(ok=True, mise_a_jour=pf_etat["mise_a_jour"], erreurs=[])
+    except prix_portefeuille.ErreurPrixPortefeuille as e:
+        pf["message"] = str(e)
+    return dict(disponible=True, avertissements=service.AVERTISSEMENTS, portefeuille=pf, **etat, **etat_csv)
 
 
 @app.post("/api/prix", dependencies=[Depends(connecte)])

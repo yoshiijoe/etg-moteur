@@ -16,15 +16,15 @@ def jours_ouvres(debut, fin):
     return sortie
 
 
-def json_marche(jours, graine, derive=0.0003):
+def json_marche(jours, graine, derive=0.0003, devise="EUR", niveau=100.0):
     gen = random.Random(graine)
-    cours, v = [], 100.0
+    cours, v = [], niveau
     for _ in jours:
         v *= 1 + gen.gauss(derive, 0.01)
         cours.append(round(v, 4))
     ouv = [round(c * (1 + gen.gauss(0, 0.002)), 4) for c in cours]
     ts = [int(dt.datetime(j.year, j.month, j.day, 12, tzinfo=dt.UTC).timestamp()) for j in jours]
-    return json.dumps({"chart": {"result": [{"timestamp": ts, "indicators": {
+    return json.dumps({"chart": {"result": [{"meta": {"currency": devise}, "timestamp": ts, "indicators": {
         "quote": [{"close": cours, "open": ouv}], "adjclose": [{"adjclose": cours}]}}]}})
 
 
@@ -41,3 +41,21 @@ def bruts_synthetiques(fin=dt.date(2026, 11, 6)):
 def csv_synthetique(fin=dt.date(2026, 11, 6), dernier=None):
     texte, _ = prix.construire_csv(bruts_synthetiques(fin), dernier or fin)
     return texte
+
+
+def bruts_portefeuille(fin=dt.date(2026, 11, 9)):
+    """Yahoo synthétique pour les lignes du portefeuille complet (Mowi en NOK, EURNOK=X) et leurs derniers cours."""
+    from etg_moteur.prix_portefeuille import FX_NOK, SYMBOLES_PORTEFEUILLE
+    bruts = {}
+    for i, s in enumerate(SYMBOLES_PORTEFEUILLE):
+        if s == FX_NOK:
+            bruts[s] = json_marche(jours_ouvres(dt.date(2007, 6, 1), fin), 500, 0.0, "NOK", 10.5)
+        else:
+            nok = s.endswith(".OL")
+            bruts[s] = json_marche(jours_ouvres(dt.date(2012, 1, 2), fin), 100 + i, 0.0004, "NOK" if nok else "EUR",
+                                   2200.0 if nok else 60.0)
+    return bruts
+
+
+def bruts_complets(fin=dt.date(2026, 11, 9)):
+    return {**bruts_synthetiques(fin), **bruts_portefeuille(fin)}

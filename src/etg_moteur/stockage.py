@@ -18,7 +18,7 @@ import re
 PREFIXE = "prix/"
 CONSERVER = 3
 MODELE = re.compile(r"^prix/(\d{8}T\d{6}Z)_(yahoo|import)\.csv$")
-SOURCES = {"yahoo": "Yahoo Finance", "import": "Import CSV"}
+SOURCES = {"yahoo": "Yahoo Finance", "import": "Import CSV", "saisie": "Saisie"}
 
 
 class ErreurStockage(RuntimeError):
@@ -31,14 +31,17 @@ class StockageLocal:
         (self.dossier / "prix").mkdir(parents=True, exist_ok=True)
 
     def lister(self, prefixe: str) -> list[str]:
-        return sorted(p.relative_to(self.dossier).as_posix() for p in (self.dossier / prefixe).glob("*") if p.is_file())
+        dossier = self.dossier / prefixe
+        return sorted(p.relative_to(self.dossier).as_posix() for p in dossier.glob("*") if p.is_file()) if dossier.is_dir() else []
 
     def lire(self, nom: str) -> bytes | None:
         chemin = self.dossier / nom
         return chemin.read_bytes() if chemin.exists() else None
 
     def ecrire(self, nom: str, contenu: bytes, type_contenu: str) -> None:
-        (self.dossier / nom).write_bytes(contenu)
+        chemin = self.dossier / nom
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_bytes(contenu)
 
     def supprimer(self, nom: str) -> None:
         (self.dossier / nom).unlink(missing_ok=True)
@@ -111,3 +114,49 @@ def ecrire_prix(stockage, texte_csv: str, source: str, maintenant: dt.datetime |
     for n in sorted(anciens)[:-(CONSERVER - 1)]:
         stockage.supprimer(n)
     return _etat(nom)
+
+
+# --- Autres familles de fichiers versionnés (prix du portefeuille, positions) -------------------------------
+
+PREFIXE_PRIX_PORTEFEUILLE = "prix_portefeuille/"
+PREFIXE_POSITIONS = "positions/"
+CONSERVER_POSITIONS = 10  # historique des 10 dernières versions
+
+
+def _modele(prefixe: str, extension: str):
+    return re.compile(rf"^{re.escape(prefixe)}(\d{{8}}T\d{{6}}Z)_(yahoo|import|saisie)\.{extension}$")
+
+
+def lire_version(stockage, prefixe: str, extension: str) -> tuple[bytes, dict] | None:
+    """(contenu, état) de la version la plus récente d'une famille de fichiers, ou None."""
+    modele = _modele(prefixe, extension)
+    for nom in reversed([n for n in stockage.lister(prefixe) if modele.match(n)]):
+        contenu = stockage.lire(nom)
+        if contenu is not None:
+            return contenu, _etat_famille(nom, modele)
+    return None
+
+
+def _etat_famille(nom: str, modele) -> dict:
+    horodatage, source = modele.match(nom).groups()
+    quand = dt.datetime.strptime(horodatage, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.UTC)
+    return dict(mise_a_jour=quand.isoformat(timespec="seconds"), source=SOURCES[source])
+
+
+def ecrire_version(stockage, prefixe: str, extension: str, contenu: bytes, type_contenu: str, source: str,
+                   conserver: int, maintenant: dt.datetime | None = None) -> dict:
+    """Range une nouvelle version, supprime les plus anciennes (on en garde `conserver`). Renvoie l'état."""
+    maintenant = (maintenant or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
+    nom = f"{prefixe}{maintenant:%Y%m%dT%H%M%SZ}_{source}.{extension}"
+    stockage.ecrire(nom, contenu, type_contenu)
+    modele = _modele(prefixe, extension)
+    anciens = sorted(n for n in stockage.lister(prefixe) if modele.match(n) and n != nom)
+    for n in anciens[:-(conserver - 1)] if conserver > 1 else anciens:
+        stockage.supprimer(n)
+    return _etat_famille(nom, modele)
+
+
+def lister_versions(stockage, prefixe: str, extension: str) -> list[dict]:
+    """Versions disponibles, de la plus récente à la plus ancienne : nom et état."""
+    modele = _modele(prefixe, extension)
+    return [dict(nom=n, **_etat_famille(n, modele)) for n in sorted(stockage.lister(prefixe), reverse=True) if modele.match(n)]
