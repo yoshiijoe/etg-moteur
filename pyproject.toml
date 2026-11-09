@@ -1,3 +1,14 @@
+[project]
+name = "etg-moteur"
+version = "0.2.0"
+description = "Backtest du moteur momentum ETG et site de pilotage"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "openpyxl>=3.1",
+    "vercel>=0.12",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

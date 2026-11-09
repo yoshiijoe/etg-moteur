@@ -241,3 +241,24 @@ def test_excel(avec_prix):
         assert ws["N5"].value == "EXSA"
         assert ws["A6"].number_format == "dd/mm/yyyy" and ws.max_row - 5 <= 520
         assert ws.cell(ws.max_row, 1).value.date() == dt.date(2026, 10, 30)
+
+
+# --- Stockage -------------------------------------------------------------------------------
+
+def test_stockage_versions_uniques_et_nettoyage(tmp_path):
+    from etg_moteur import stockage
+    st = stockage.StockageLocal(str(tmp_path))
+    assert stockage.lire_prix(st) is None
+    t0 = dt.datetime(2026, 11, 9, 12, 0, 0, tzinfo=dt.UTC)
+    for i in range(5):
+        stockage.ecrire_prix(st, f"version {i}", "import" if i % 2 else "yahoo", t0 + dt.timedelta(minutes=i))
+    texte, etat = stockage.lire_prix(st)
+    assert texte == "version 4" and etat["source"] == "Yahoo Finance" and etat["mise_a_jour"] == "2026-11-09T12:04:00+00:00"
+    assert len(st.lister("prix/")) == stockage.CONSERVER
+
+
+def test_etat_apres_import_puis_mise_a_jour_reflete_la_derniere_ecriture(avec_prix, monkeypatch):
+    assert avec_prix.get("/api/etat").json()["source"] == "Import CSV"
+    monkeypatch.setattr(prix, "telecharger", lambda *a, **k: (bruts_synthetiques(), {}))
+    assert avec_prix.post("/api/prix").status_code == 200
+    assert avec_prix.get("/api/etat").json()["source"] == "Yahoo Finance"

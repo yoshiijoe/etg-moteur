@@ -41,6 +41,35 @@ Avant le dernier vendredi du mois, le résultat n'est qu'un aperçu.
 .venv/bin/python scripts/verifier_excel.py "classeur.xlsx"
 ```
 
+## Site (Vercel)
+
+Un site protégé par mot de passe permet de mettre à jour les prix, lancer le backtest, voir la décision du mois et télécharger un Excel. Le cahier des charges est dans `docs/cahier-des-charges-site.md`.
+
+- `public/` : page unique (HTML, CSS, JavaScript simples, graphiques SVG).
+- `api/index.py` : API FastAPI (connexion, état, prix, Cron, import CSV, backtest, décision, Excel) qui appelle le paquet `etg_moteur`.
+- `src/etg_moteur/prix.py` : téléchargement Yahoo et construction du CSV hebdomadaire (les scripts `telecharger_prix.py` et `construire_prix.py` l'utilisent aussi).
+- Les prix sont rangés dans un Vercel Blob **privé** (`prix/AAAAMMJJTHHMMSSZ_yahoo.csv` ou `_import.csv`, les 3 dernières versions). Rien n'est dans git.
+
+Variables d'environnement Vercel (jamais dans le code) : `SITE_PASSWORD`, `SESSION_SECRET`, `CRON_SECRET`, et `BLOB_READ_WRITE_TOKEN` (posée par Vercel quand le Blob est relié au projet).
+
+Essayer en local :
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+cp data/prix_hebdo.csv .dev-stockage/prix/20261109T000000Z_import.csv   # optionnel : ou « Importer un CSV » dans la page
+.venv/bin/python scripts/serveur_local.py   # http://localhost:8765, mot de passe local : « local » (ETG_DEV_PASSWORD)
+```
+
+Changer le mot de passe du site : `vercel env rm SITE_PASSWORD production`, puis `vercel env add SITE_PASSWORD production --sensitive` et redéployer (`vercel deploy --prod`). Changer `SESSION_SECRET` déconnecte tout le monde.
+
+Si Yahoo bloque les serveurs Vercel (erreurs 403 ou 429), importer le CSV depuis le Mac, avec le bouton « Importer un CSV » ou :
+
+```bash
+ETG_SITE_URL=https://mon-site.vercel.app .venv/bin/python scripts/envoyer_prix.py
+```
+
+Le Cron Vercel met les prix à jour en semaine à 17 h UTC (après la clôture d'Euronext, 18 h ou 19 h à Paris).
+
 ## Contenu
 
 | Fichier | Rôle |

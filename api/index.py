@@ -88,11 +88,10 @@ def deconnexion():
 # --- Prix ---------------------------------------------------------------------------------
 
 def _prix_stockes() -> tuple[str, dict]:
-    st = stockage.ouvrir()
-    texte = stockage.lire_prix(st)
-    if texte is None:
+    trouve = stockage.lire_prix(stockage.ouvrir())
+    if trouve is None:
         raise Erreur("Aucun prix en mémoire. Cliquer sur « Mettre à jour les prix » ou importer un CSV.", 404)
-    return texte, stockage.lire_etat(st)
+    return trouve
 
 
 def _decrire(texte: str, etat: dict) -> dict:
@@ -102,11 +101,10 @@ def _decrire(texte: str, etat: dict) -> dict:
 
 @app.get("/api/etat", dependencies=[Depends(connecte)])
 def etat():
-    st = stockage.ouvrir()
-    texte = stockage.lire_prix(st)
-    if texte is None:
+    trouve = stockage.lire_prix(stockage.ouvrir())
+    if trouve is None:
         return dict(disponible=False, avertissements=service.AVERTISSEMENTS)
-    return _decrire(texte, stockage.lire_etat(st))
+    return _decrire(*trouve)
 
 
 def mettre_a_jour_prix() -> dict:
@@ -123,8 +121,7 @@ def mettre_a_jour_prix() -> dict:
     dernier = prix.dernier_vendredi_disponible(cours, maintenant)
     texte, _ = prix.construire_csv(bruts, dernier)
     etat_csv = service.etat_donnees(texte)  # vérifie que le moteur sait lire le fichier
-    etat = dict(mise_a_jour=maintenant.isoformat(timespec="seconds"), source="Yahoo Finance")
-    stockage.ecrire_prix(stockage.ouvrir(), texte, etat)
+    etat = stockage.ecrire_prix(stockage.ouvrir(), texte, "yahoo", maintenant)
     return dict(disponible=True, avertissements=service.AVERTISSEMENTS, **etat, **etat_csv)
 
 
@@ -160,8 +157,7 @@ async def importer(request: Request):
         raise Erreur("Le fichier doit être encodé en UTF-8.")
     etat_csv = service.etat_donnees(texte)  # lève une erreur lisible si le format est faux
     service.lancer_backtest(texte, service.Requete(), avec_variantes=False)  # le moteur doit pouvoir tourner
-    etat = dict(mise_a_jour=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), source="Import CSV")
-    stockage.ecrire_prix(stockage.ouvrir(), texte, etat)
+    etat = stockage.ecrire_prix(stockage.ouvrir(), texte, "import")
     return dict(disponible=True, avertissements=service.AVERTISSEMENTS, **etat, **etat_csv)
 
 
