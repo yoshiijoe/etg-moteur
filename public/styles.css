@@ -64,7 +64,8 @@ p { margin: 0 0 12px; }
 .bouton:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .message { min-height: 24px; margin: 12px 0 0; font-size: 14px; color: var(--secondaire); }
-.message.erreur { color: var(--erreur); }
+.message:not(:empty) { border-left: 2px solid var(--accent); padding: 2px 0 2px 12px; color: var(--texte); }
+.message.erreur { color: var(--erreur); border-left-color: var(--erreur); }
 .apercu { border-left: 2px solid var(--accent); padding: 4px 0 4px 12px; font-size: 14px; }
 .aide { font-size: 13px; color: var(--secondaire); }
 .info { font-size: 13px; color: var(--secondaire); }

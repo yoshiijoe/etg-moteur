@@ -45,7 +45,7 @@ async function avecChargement(bouton, libelle, tache) {
   bouton.disabled = true; bouton.setAttribute("aria-busy", "true"); bouton.textContent = libelle;
   message("");
   try { return await tache(); }
-  catch (e) { if (e.statut !== 401) message(e.message || String(e), true); return undefined; }
+  catch (e) { if (e.statut !== 401) message(`Échec : ${e.message || String(e)}`, true); return undefined; }
   finally { bouton.disabled = false; bouton.removeAttribute("aria-busy"); bouton.textContent = ancien; }
 }
 
@@ -287,10 +287,17 @@ if ("ResizeObserver" in window) {
 /* ---------- Actions ---------- */
 
 $("b-prix").addEventListener("click", () => avecChargement($("b-prix"), "Mise à jour…", async () => {
+  const avant = etatPrix;
+  message("Téléchargement depuis Yahoo Finance : comptez 10 à 20 secondes.");
   const e = await (await post("/api/prix")).json();
   afficherEtat(e);
-  message(`Prix mis à jour au ${fDate(e.dernier_vendredi)}`);
+  let texte = `Prix mis à jour le ${fHeure(e.mise_a_jour)} : dernier vendredi ${fDate(e.dernier_vendredi)}`;
+  if (avant && avant.disponible) {
+    const nouvelles = e.semaines - avant.semaines;
+    texte += nouvelles > 0 ? `, ${nouvelles} nouvelle(s) semaine(s).` : ". Aucune nouvelle semaine : les prix étaient déjà à jour.";
+  } else texte += ".";
   await chargerDecision();
+  message(texte);
 }));
 
 $("b-backtest").addEventListener("click", () => avecChargement($("b-backtest"), "Calcul…", async () => {
