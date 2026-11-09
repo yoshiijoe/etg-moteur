@@ -253,3 +253,23 @@ def test_simulation_trois_candidats_cote_a_cote(pret, faux_yahoo):
     r = pret.post("/api/simulation", json=dict(remplace="LDO", candidats=[dict(symbole="SAN.PA"), dict(symbole="SAP.DE"),
                                                                        dict(symbole="NEUF.PA")]))
     assert r.status_code == 200 and len(r.json()["resultats"]) == 3
+
+
+def test_nouveau_symbole_saisi_est_telecharge_puis_conserve(pret, faux_yahoo):
+    corps = positions()
+    corps["lignes"][5]["symbole"] = "SAN.PA"          # remplace Prysmian par un titre absent des prix du portefeuille
+    brouillon = pret.post("/api/indicateurs", json=dict(portefeuille=corps)).json()
+    assert brouillon["risque"] is not None and brouillon["sans_prix"] == []
+    r = pret.post("/api/portefeuille", json=corps)
+    assert r.status_code == 200 and not r.json()["avertissements_prix"]
+    ligne = next(l for l in r.json()["lignes"] if l["symbole"] == "SAN.PA")
+    assert ligne["cours_eur"] > 0 and not ligne["sans_prix"]
+    # Conservé : une lecture ultérieure n'a plus besoin de Yahoo
+    assert pret.get("/api/portefeuille").json()["lignes"][5]["cours_eur"] > 0
+
+
+def test_symbole_saisi_introuvable_est_signale(pret, faux_yahoo):
+    corps = positions()
+    corps["lignes"][5]["symbole"] = "ZZZ.PA"
+    r = pret.post("/api/portefeuille", json=corps)
+    assert r.status_code == 400 and "introuvable sur Yahoo" in r.json()["erreur"]

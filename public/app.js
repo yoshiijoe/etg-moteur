@@ -78,7 +78,24 @@ $("form-connexion").addEventListener("submit", async (e) => {
   try {
     await post("/api/connexion", { motdepasse: $("motdepasse").value });
     $("motdepasse").value = ""; $("connexion").hidden = true;
-    await demarrer();
+    await /* ---------- Navigation : #moteur et #portefeuille ---------- */
+
+function afficherPage() {
+  const page = location.hash === "#portefeuille" ? "portefeuille" : "moteur";
+  $("application").dataset.page = page;
+  $("page-moteur").hidden = page !== "moteur";
+  $("page-portefeuille").hidden = page !== "portefeuille";
+  for (const p of ["moteur", "portefeuille"]) {
+    const a = $("nav-" + p);
+    if (page === p) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  if (typeof pageAffichee === "function") pageAffichee(page);
+  if (page === "moteur") for (const id of ["graphique-valeur", "graphique-perte"]) tracer($(id));
+}
+window.addEventListener("hashchange", afficherPage);
+afficherPage();
+
+demarrer();
   } catch (err) {
     $("message-connexion").textContent = err.message; $("message-connexion").classList.add("erreur");
   } finally { bouton.disabled = false; }
@@ -191,8 +208,10 @@ function afficherBacktest(b) {
     bloc.append(div);
   }
   const s = b.series;
-  courbes($("graphique-valeur"), s.dates, [{ v: s.reference, c: "ref", n: "STOXX 600" }, { v: s.moteur, c: "moteur", n: "Moteur" }], (v) => fNum(v, 1), false);
-  courbes($("graphique-perte"), s.dates, [{ v: s.perte_reference, c: "ref", n: "STOXX 600" }, { v: s.perte_moteur, c: "moteur", n: "Moteur" }], (v) => fPct(v, 1), true);
+  const nomEgal = b.parts_egales.nom;
+  $("legende-egal").textContent = nomEgal;
+  courbes($("graphique-valeur"), s.dates, [{ v: s.parts_egales, c: "egal", n: nomEgal }, { v: s.reference, c: "ref", n: "STOXX 600" }, { v: s.moteur, c: "moteur", n: "Moteur" }], (v) => fNum(v, 1), false);
+  courbes($("graphique-perte"), s.dates, [{ v: s.perte_parts_egales, c: "egal", n: nomEgal }, { v: s.perte_reference, c: "ref", n: "STOXX 600" }, { v: s.perte_moteur, c: "moteur", n: "Moteur" }], (v) => fPct(v, 1), true);
   const th = $("table-variantes").tHead; th.innerHTML = "";
   const tr = document.createElement("tr");
   const colonnes = b.colonnes_mesures;
@@ -201,7 +220,7 @@ function afficherBacktest(b) {
   const corps = $("table-variantes").tBodies[0]; corps.innerHTML = "";
   for (const v of b.variantes) {
     const ligne = document.createElement("tr");
-    if (v.nom.startsWith("STOXX")) ligne.className = "reference";
+    if (v.nom.startsWith("STOXX") || v.nom.includes("parts égales")) ligne.className = "reference";
     const nom = document.createElement("td"); nom.textContent = v.nom; ligne.append(nom);
     for (const c of colonnes) {
       const td = document.createElement("td"); td.className = "num";
@@ -315,6 +334,7 @@ $("b-prix").addEventListener("click", () => avecChargement($("b-prix"), "Mise à
   } else texte += ".";
   await chargerDecision();
   if (!$("resultats").hidden) await lancerBacktest();
+  if (typeof prixMisAJour === "function") prixMisAJour();
   message(texte);
 }));
 
@@ -379,9 +399,27 @@ async function demarrer() {
     if (!e.disponible) { message("Aucun prix en mémoire. Cliquer sur « Mettre à jour les prix », ou importer un CSV."); return; }
     await chargerDecision();
     await lancerBacktest();
+    if (typeof apresDemarrage === "function") apresDemarrage();
   } catch (err) {
     if (err.statut !== 401) { $("application").hidden = false; message(err.message, true); }
   }
 }
+
+/* ---------- Navigation : #moteur et #portefeuille ---------- */
+
+function afficherPage() {
+  const page = location.hash === "#portefeuille" ? "portefeuille" : "moteur";
+  $("application").dataset.page = page;
+  $("page-moteur").hidden = page !== "moteur";
+  $("page-portefeuille").hidden = page !== "portefeuille";
+  for (const p of ["moteur", "portefeuille"]) {
+    const a = $("nav-" + p);
+    if (page === p) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  if (typeof pageAffichee === "function") pageAffichee(page);
+  if (page === "moteur") for (const id of ["graphique-valeur", "graphique-perte"]) tracer($(id));
+}
+window.addEventListener("hashchange", afficherPage);
+afficherPage();
 
 demarrer();

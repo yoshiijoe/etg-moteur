@@ -17,6 +17,10 @@
 <header class="barre">
   <div class="barre-contenu">
     <span class="marque">Moteur ETG</span>
+    <nav class="nav" aria-label="Pages">
+      <a id="nav-moteur" href="#moteur">Moteur</a>
+      <a id="nav-portefeuille" href="#portefeuille">Portefeuille</a>
+    </nav>
     <div class="barre-droite">
       <span id="etat-prix" class="etat-prix">Prix : chargement</span>
       <button id="theme" class="bouton discret" type="button" aria-label="Basculer entre thème clair et sombre">Clair / sombre</button>
@@ -35,7 +39,7 @@
     <p id="message-connexion" class="message" role="status"></p>
   </section>
 
-  <div id="application" hidden>
+  <div id="application" data-page="moteur" hidden>
     <section class="actions" aria-label="Actions">
       <div class="actions-boutons">
         <button id="b-prix" class="bouton" type="button">Mettre à jour les prix</button>
@@ -47,6 +51,7 @@
       <p id="message" class="message" role="status" aria-live="polite"></p>
     </section>
 
+    <div id="page-moteur">
     <section class="bloc" aria-labelledby="t-decision">
       <h1 id="t-decision">Décision du mois</h1>
       <p id="apercu" class="apercu" hidden></p>
@@ -104,14 +109,88 @@
         <p id="periode" class="info"></p>
         <div class="chiffres" id="chiffres"></div>
         <h2>Valeur en base 100</h2>
-        <div class="legende"><span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600</div>
-        <div id="graphique-valeur" class="graphique" role="img" aria-label="Valeur du moteur et du STOXX 600 en base 100"></div>
+        <div class="legende"><span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600 <span class="trait egal"></span><span id="legende-egal">10 ETF à parts égales</span></div>
+        <div id="graphique-valeur" class="graphique" role="img" aria-label="Valeur du moteur, du STOXX 600 et des ETF à parts égales en base 100"></div>
         <h2>Perte depuis le sommet</h2>
         <div id="graphique-perte" class="graphique" role="img" aria-label="Perte du moteur depuis son plus haut"></div>
         <h2>Variantes</h2>
         <div class="defile"><table id="table-variantes"><thead></thead><tbody></tbody></table></div>
       </div>
     </section>
+    </div>
+
+    <div id="page-portefeuille" hidden>
+      <section class="bloc" aria-labelledby="t-positions">
+        <h1 id="t-positions">Positions</h1>
+        <p class="aide" id="pf-intro">Saisissez le nombre de titres détenus et le cash : les poids actuels se calculent avec les derniers cours. Sans saisie, les poids cibles de la page Stratégie sont utilisés.</p>
+        <div class="actions-boutons pf-actions">
+          <button id="pf-enregistrer" class="bouton principal" type="button">Enregistrer les positions</button>
+          <button id="pf-moteur" class="bouton" type="button">Aligner la poche moteur sur la décision du mois</button>
+          <button id="pf-ajouter" class="bouton" type="button">Ajouter une ligne</button>
+          <button id="pf-annuler" class="bouton discret" type="button">Annuler les modifications</button>
+        </div>
+        <p id="pf-message" class="message" role="status" aria-live="polite"></p>
+        <p id="pf-etat" class="info"></p>
+        <div class="defile"><table id="table-positions" class="saisie">
+          <thead><tr><th>Poche</th><th>Code</th><th>Nom</th><th>Symbole Yahoo</th><th>ISIN</th><th>Secteur</th><th>Scénario</th>
+            <th class="num">Titres</th><th class="num">Cours (€)</th><th class="num">Poids</th><th class="num">Cible (%)</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="ligne-form pf-cash">
+          <label for="pf-cash">Cash restant (€)<input id="pf-cash" type="number" min="0" step="any" inputmode="decimal"></label>
+          <p id="pf-total" class="info"></p>
+        </div>
+        <p class="aide">Les secteurs sont des propositions « à vérifier » : le jeu suit la classification ICB. Un secteur modifié est considéré comme vérifié. Les ETF du moteur sans scénario défini sont signalés « à définir » et ne comptent dans aucun scénario.</p>
+        <div class="ligne-form" id="pf-versions-zone" hidden>
+          <label for="pf-versions">Versions enregistrées (10 au plus)
+            <select id="pf-versions"></select>
+          </label>
+          <button id="pf-restaurer" class="bouton" type="button">Restaurer cette version</button>
+        </div>
+      </section>
+
+      <section class="bloc" aria-labelledby="t-indicateurs">
+        <h1 id="t-indicateurs">Indicateurs du portefeuille</h1>
+        <p class="aide estimation">Estimation : formules et pondérations du jeu non publiées. Le simulateur mesure le risque et la diversification ; il ne prévoit aucun cours et ne recommande aucun achat.</p>
+        <p id="ind-etat" class="info"></p>
+        <p id="ind-erreur" class="message erreur" hidden></p>
+        <div class="chiffres chiffres-pf" id="ind-chiffres"></div>
+        <h2>Scénarios A, B et C</h2>
+        <div id="ind-scenarios" class="scenarios"></div>
+        <h2>Règles et contrôles</h2>
+        <div class="defile"><table id="table-controles"><thead><tr><th>Règle</th><th class="num">Valeur</th><th>Seuil</th><th>État</th><th>Détail</th></tr></thead><tbody></tbody></table></div>
+        <h2>Contribution de chaque ligne au risque</h2>
+        <div id="ind-contributions" class="barres"></div>
+      </section>
+
+      <section class="bloc" aria-labelledby="t-correlations">
+        <h1 id="t-correlations">Corrélations</h1>
+        <div class="ligne-info">
+          <p class="aide">Corrélation des rendements hebdomadaires entre les lignes. Plus la case est orange, plus les deux lignes évoluent ensemble.</p>
+          <label class="champ-inline">Fenêtre
+            <select id="cor-fenetre"><option value="52">52 semaines</option><option value="180">180 semaines</option></select>
+          </label>
+        </div>
+        <p id="cor-erreur" class="message erreur" hidden></p>
+        <div id="cor-alertes" class="alertes"></div>
+        <div class="defile"><table id="table-correlations" class="matrice"></table></div>
+      </section>
+
+      <section class="bloc" aria-labelledby="t-simulation">
+        <h1 id="t-simulation">Et si je remplace…</h1>
+        <p class="aide">Comparez le risque, la diversification et les règles avant et après un remplacement. Aucun rendement passé ou futur n'est affiché : on ne choisit pas une ligne sur sa performance.</p>
+        <div class="grille-form">
+          <label>Ligne à remplacer<select id="sim-remplace"></select></label>
+        </div>
+        <div id="sim-candidats" class="candidats"></div>
+        <div class="actions-boutons">
+          <button id="sim-ajouter" class="bouton" type="button">Ajouter un candidat (3 au plus)</button>
+          <button id="sim-lancer" class="bouton principal" type="button">Simuler le remplacement</button>
+        </div>
+        <p id="sim-message" class="message" role="status" aria-live="polite"></p>
+        <div id="sim-resultats"></div>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -127,5 +206,6 @@
   </div>
 </footer>
 <script src="/app.js"></script>
+<script src="/portefeuille.js"></script>
 </body>
 </html>

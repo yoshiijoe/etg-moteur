@@ -153,3 +153,40 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
 .definitions dd { margin: 0; }
 @media (max-width: 520px) { .definitions { grid-template-columns: 1fr; } .definitions dd { margin-bottom: 6px; } }
 .detenus .aide { margin: 8px 0 0; }
+
+/* --- Navigation et page Portefeuille --- */
+.nav { display: flex; gap: 20px; }
+.nav a { text-decoration: none; color: var(--secondaire); padding: 6px 0; border-bottom: 2px solid transparent; font-size: 14px; }
+.nav a:hover { color: var(--texte); }
+.nav a[aria-current="page"] { color: var(--texte); border-bottom-color: var(--accent); }
+#application[data-page="portefeuille"] #b-backtest { display: none; }
+.trait.egal { background: repeating-linear-gradient(90deg, var(--gris-courbe) 0 4px, transparent 4px 7px); margin-left: 12px; opacity: .6; }
+.graphique .courbe.egal { stroke: var(--gris-courbe); stroke-dasharray: 4 4; opacity: .6; stroke-width: 1.5; }
+table.saisie input, table.saisie select { min-height: 34px; padding: 4px 6px; font-size: 13px; width: auto; }
+table.saisie td { padding-right: 8px; }
+.poche { font-size: 12px; color: var(--secondaire); }
+.a-verifier { font-size: 11px; color: var(--secondaire); }
+.pf-actions { margin-bottom: 8px; }
+.pf-cash { margin-top: 12px; align-items: center; }
+.chiffres-pf { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.chiffres-pf .chiffre { border-left: 0; padding-left: 0; border-bottom: 1px solid var(--trait); }
+.chiffres-pf .chiffre-valeur { font-size: 22px; }
+.estimation { border-left: 2px solid var(--trait-fort); padding-left: 12px; }
+.etat { display: inline-block; font-size: 11px; border: 1px solid var(--secondaire); border-radius: var(--rayon); padding: 0 6px; color: var(--secondaire); }
+.etat.attention { border-color: var(--texte); color: var(--texte); font-weight: 600; }
+.etat.hors { border-color: var(--erreur); color: var(--erreur); font-weight: 600; }
+.scenario { display: grid; grid-template-columns: 110px 1fr 70px auto; gap: 12px; align-items: center; min-height: 36px; }
+.piste { position: relative; height: 8px; background: var(--survol); border: 1px solid var(--trait); }
+.piste .fourchette { position: absolute; top: 0; bottom: 0; left: var(--a); width: var(--b); background: var(--trait); }
+.piste .rempli { position: absolute; top: 0; bottom: 0; left: 0; width: var(--v); background: var(--texte); }
+.barre-ligne { display: grid; grid-template-columns: 70px minmax(80px, 1fr) minmax(220px, 2fr); gap: 12px; align-items: center; min-height: 30px; font-size: 13px; }
+.piste-barre { height: 8px; background: var(--survol); }
+.piste-barre span { display: block; height: 100%; width: var(--v); background: var(--texte); }
+table.matrice { font-size: 11px; width: auto; }
+table.matrice th, table.matrice td { padding: 3px 4px; text-align: center; border-bottom: 0; }
+table.matrice td.cellule { min-width: 38px; font-family: var(--mono); }
+.liste-alertes, .liste-controles { margin: 4px 0 12px; padding-left: 18px; }
+.candidat { border: 1px solid var(--trait); border-radius: var(--rayon); margin: 0 0 12px; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.alerte-candidat { border-left: 2px solid var(--erreur); padding: 4px 12px; margin: 8px 0; }
+td.ecart, td.detail { color: var(--secondaire); }
+@media (max-width: 720px) { .scenario { grid-template-columns: 1fr 1fr; } .barre-ligne { grid-template-columns: 60px 1fr; } .barre-valeur { grid-column: 1 / -1; } }

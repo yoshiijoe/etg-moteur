@@ -230,6 +230,9 @@ def calculer_indicateurs(ctx: Contexte, fenetre: int | None = None) -> dict:
         perf["performance_ajustee"] = perf["performance"] / ind["risque"]["vol_ex_ante"]
     ind["performance"] = perf
     ind["lignes_detail"] = [l.en_dict() for l in ctx.lignes]
+    ind["cours_eur"] = ctx.cours_eur
+    ind["valeur_totale"] = (sum(ctx.quantites.get(l.code, 0.0) * ctx.cours_eur.get(l.code, 0.0) for l in ctx.lignes
+                                if l.type != "cash") + (ctx.cash_eur or 0.0)) if ctx.mode == "positions" else None
     ind["sans_prix"] = ctx.manquants
     if ind["risque"]:
         ind["risque"]["contributions_liste"] = sorted(
@@ -353,3 +356,40 @@ def symboles_supplementaires(saisie: dict | None) -> list[str]:
         if s and s not in connus and FORMAT_SYMBOLE.match(s) and s not in sortie:
             sortie.append(s)
     return sortie[: MAX_LIGNES]
+
+
+def symboles_inconnus(doc_prix: dict, saisie: dict | None) -> list[str]:
+    """Symboles saisis qui n'ont encore aucun prix (ni dans les prix du portefeuille, ni dans le CSV du moteur)."""
+    if not saisie:
+        return []
+    connus = set(doc_prix["series"]) | {s[1] for s in SERIES if s[1]}
+    sortie = []
+    for l in saisie.get("lignes", []):
+        s = (l.get("symbole") or "").strip().upper()
+        if l.get("type") != "cash" and s and FORMAT_SYMBOLE.match(s) and s not in connus and s not in sortie:
+            sortie.append(s)
+    return sortie[:10]
+
+
+def completer_prix(doc_prix: dict, saisie: dict | None, telecharger=None) -> list[str]:
+    """Télécharge les symboles saisis qui n'ont pas de prix et les ajoute au document (en mémoire).
+
+    Renvoie les avertissements (symbole introuvable, Yahoo qui ne répond pas) : la ligne reste alors sans prix.
+    """
+    telecharger = telecharger or pp.telecharger_candidat
+    dernier = dt.date.fromisoformat(doc_prix["dates"][-1])
+    avertissements = []
+    for s in symboles_inconnus(doc_prix, saisie):
+        try:
+            r = telecharger(s, dernier)
+        except (prix.ErreurYahoo, pp.ErreurPrixPortefeuille) as e:
+            avertissements.append(f"{s} : {e}")
+            continue
+        if not r["existe"]:
+            avertissements.append(f"{s} : symbole introuvable sur Yahoo Finance")
+            continue
+        doc_prix["series"][s] = r["hebdo"]
+        doc_prix["dernier"][s] = dict(r["dernier"], devise=r["devise"])
+        doc_prix["recent"][s] = r.get("recent", {})
+        doc_prix.setdefault("ajoutes", []).append(s)
+    return avertissements

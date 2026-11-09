@@ -298,11 +298,13 @@ def _saisie(entree: PortefeuilleIn | None) -> dict | None:
     return trouve[0] if trouve else None
 
 
-def _contexte(entree: PortefeuilleIn | None) -> sp.Contexte:
+def _contexte(entree: PortefeuilleIn | None, doc: dict | None = None) -> sp.Contexte:
     texte, _ = _prix_stockes()
-    doc = _prix_portefeuille()
+    doc = doc or _prix_portefeuille()
+    saisie = _saisie(entree)
+    sp.completer_prix(doc, saisie)  # symboles saisis sans prix : téléchargés à la volée
     try:
-        return sp.construire_contexte(texte, doc, _saisie(entree))
+        return sp.construire_contexte(texte, doc, saisie)
     except (sp.ErreurPortefeuille, composition.ErreurComposition, service.ErreurRequete) as e:
         raise Erreur(str(e), 400)
 
@@ -322,12 +324,21 @@ def lire_portefeuille():
 
 @app.post("/api/portefeuille", dependencies=[Depends(connecte)])
 def enregistrer_portefeuille(corps: PortefeuilleIn):
+    doc = _prix_portefeuille()
+    avertissements = sp.completer_prix(doc, corps.model_dump())
     try:
-        ctx = sp.construire_contexte(_prix_stockes()[0], _prix_portefeuille(), corps.model_dump())  # valide avant d'écrire
+        ctx = sp.construire_contexte(_prix_stockes()[0], doc, corps.model_dump())  # valide avant d'écrire
         sp.ecrire_positions(stockage.ouvrir(), corps.model_dump())
     except (sp.ErreurPortefeuille, composition.ErreurComposition, service.ErreurRequete) as e:
-        raise Erreur(str(e), 400)
-    return _vue(ctx)
+        raise Erreur(str(e) + (" " + " ; ".join(avertissements) if avertissements else ""), 400)
+    if doc.get("ajoutes"):  # les nouveaux symboles gardent leurs prix pour les prochains calculs
+        propre = {k: v for k, v in doc.items() if not k.startswith("_") and k != "ajoutes"}
+        stockage.ecrire_version(stockage.ouvrir(), stockage.PREFIXE_PRIX_PORTEFEUILLE, "json",
+                                prix_portefeuille.en_texte(propre).encode("utf-8"), "application/json", "yahoo",
+                                stockage.CONSERVER)
+    vue = _vue(ctx)
+    vue["avertissements_prix"] = avertissements
+    return vue
 
 
 @app.post("/api/portefeuille/restaurer", dependencies=[Depends(connecte)])
