@@ -206,3 +206,8 @@ table.matrice td.cellule { min-width: 38px; font-family: var(--mono); }
 .alerte-candidat { border-left: 2px solid var(--erreur); padding: 4px 12px; margin: 8px 0; }
 td.ecart, td.detail { color: var(--secondaire); }
 @media (max-width: 720px) { .scenario { grid-template-columns: 1fr 1fr; } .barre-ligne { grid-template-columns: 60px 1fr; } .barre-valeur { grid-column: 1 / -1; } }
+
+.graphique .baton-plus { fill: var(--accent); }
+.graphique .baton-moins { fill: var(--gris-courbe); }
+.graphique .zero { stroke: var(--trait-fort); stroke-width: 1; }
+td.num.acheter { color: var(--texte); }

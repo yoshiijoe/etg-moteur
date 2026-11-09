@@ -91,6 +91,8 @@ def synthese(lignes: list[dict]) -> dict:
     """Moyennes et dispersion sur les tranches complètes (au moins 24 semaines)."""
     pleines = [l for l in lignes if l["semaines"] >= 24]
     n = len(pleines)
+    if n == 0:
+        raise ValueError("Aucune tranche de 6 mois complète sur ces données.")
     mot = [l["moteur"] for l in pleines]
     ref = [l["stoxx"] for l in pleines]
     eg = [l["parts_egales"] for l in pleines]
@@ -106,7 +108,7 @@ def synthese(lignes: list[dict]) -> dict:
         part_bat_stoxx=sum(x > 0 for x in ec) / n,
         part_bat_parts_egales=sum(a > b for a, b in zip(mot, eg)) / n,
         part_positive=sum(x > 0 for x in mot) / n,
-        pire=min(mot), meilleure=max(mot),
+        pire=min(mot), meilleure=max(mot), stoxx_pire=min(ref), stoxx_meilleure=max(ref),
         pire_ecart=min(ec), meilleur_ecart=max(ec),
         perte_max_moyenne=st.mean(l["perte_max"] for l in pleines),
     )

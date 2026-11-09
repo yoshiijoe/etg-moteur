@@ -124,6 +124,24 @@
         <div class="defile"><table id="table-variantes"><thead></thead><tbody></tbody></table></div>
       </div>
     </section>
+
+    <section class="bloc" aria-labelledby="t-tranches">
+      <h1 id="t-tranches">Tranches de 6 mois</h1>
+      <p class="aide">L'horizon du jeu est de 6 mois. Chaque semestre (janvier-juin, juillet-décembre) repart d'un portefeuille vide, achète le top dès la première semaine, puis suit la règle chaque fin de mois. Les tranches utilisent les paramètres du backtest ci-dessus, mais toujours tout l'historique disponible, depuis 2008.</p>
+      <p id="vide-tranches" class="aide">Les tranches s'affichent avec le backtest.</p>
+      <div id="tranches" hidden>
+        <p id="tranches-info" class="info"></p>
+        <div class="chiffres" id="tranches-chiffres"></div>
+        <h2>Écart avec le STOXX 600, tranche par tranche</h2>
+        <div class="legende"><span class="trait moteur"></span>Le moteur fait mieux <span class="trait ref"></span>Le moteur fait moins bien</div>
+        <div id="graphique-tranches" class="graphique" role="img" aria-label="Écart entre le moteur et le STOXX 600 pour chaque tranche de 6 mois"></div>
+        <h2>Variantes sur 6 mois</h2>
+        <div class="defile"><table id="table-tranches-variantes"><thead><tr><th>Variante</th><th class="num">Moyenne</th><th class="num">Médiane</th><th class="num">Écart moyen</th><th class="num">Bat le STOXX 600</th><th class="num">Bat les parts égales</th><th class="num">Pire tranche</th></tr></thead><tbody></tbody></table></div>
+        <h2>Détail des tranches</h2>
+        <div class="defile"><table id="table-tranches"><thead><tr><th>Tranche</th><th class="num">Semaines</th><th class="num">Moteur</th><th class="num">STOXX 600</th><th class="num">Écart</th><th class="num">Parts égales</th><th class="num">Perte max</th><th>ETF achetés au départ</th></tr></thead><tbody></tbody></table></div>
+        <p id="tranches-note" class="aide"></p>
+      </div>
+    </section>
     </div>
 
     <div id="page-portefeuille">

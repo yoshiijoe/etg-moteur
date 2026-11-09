@@ -217,13 +217,20 @@ def decision(corps: Parametres | None = None):
     return service.lancer_decision(texte, (corps or Parametres()).requete())
 
 
+@app.post("/api/tranches", dependencies=[Depends(connecte)])
+def tranches(corps: Parametres | None = None):
+    texte, _ = _prix_stockes()
+    return service.lancer_tranches(texte, (corps or Parametres()).requete())
+
+
 @app.post("/api/excel", dependencies=[Depends(connecte)])
 def telecharger_excel(corps: Parametres | None = None):
     texte, etat = _prix_stockes()
     req = (corps or Parametres()).requete()
     bt = service.lancer_backtest(texte, req)
     dec = service.lancer_decision(texte, req)
-    contenu = excel.construire_classeur(texte, bt, dec, {**etat, **service.etat_donnees(texte)})
+    tr = service.lancer_tranches(texte, req)
+    contenu = excel.construire_classeur(texte, bt, dec, {**etat, **service.etat_donnees(texte)}, tr)
     return Response(contenu, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{excel.nom_fichier(dec)}"',
                              "Cache-Control": "no-store"})

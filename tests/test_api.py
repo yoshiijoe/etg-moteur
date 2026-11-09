@@ -210,7 +210,7 @@ def test_excel(avec_prix):
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="moteur-etg-2026-10-30.xlsx"'
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert wb.sheetnames == ["Tableau de bord", "Lisez-moi", "Resultats", "Variantes", "Decision", "Serie", "Poids", "Prix_cloture",
+    assert wb.sheetnames == ["Tableau de bord", "Tranches", "Lisez-moi", "Resultats", "Variantes", "Decision", "Serie", "Poids", "Prix_cloture",
                              "Prix_ouverture"]
     lisez = " ".join(str(c.value) for row in wb["Lisez-moi"].iter_rows() for c in row if c.value)
     assert "Yahoo" in lisez and "07/2023" in lisez and "non validés" in lisez
@@ -297,3 +297,23 @@ def test_changer_les_parametres_ne_donne_jamais_404(avec_prix):
         for route in ("/api/backtest", "/api/decision", "/api/excel"):
             r = avec_prix.post(route, json=corps)
             assert r.status_code == 200, (route, corps, r.status_code, r.text[:200])
+
+
+def test_tranches_api_et_excel_identiques(avec_prix):
+    corps = {"top": 3, "filtre": False}
+    r = avec_prix.post("/api/tranches", json=corps)
+    assert r.status_code == 200, r.text
+    t = r.json()
+    assert t["synthese"]["tranches"] >= 1 and len(t["variantes"]) == 5
+    assert all(set(l) >= {"tranche", "moteur", "stoxx", "ecart", "depart"} for l in t["lignes"])
+    x = avec_prix.post("/api/excel", json=corps)
+    ws = openpyxl.load_workbook(io.BytesIO(x.content))["Tranches"]
+    valeurs = [c.value for row in ws.iter_rows() for c in row if c.value is not None]
+    assert any(isinstance(v, float) and v == pytest.approx(t["synthese"]["moteur_moyenne"], abs=1e-12) for v in valeurs)
+    for l in t["lignes"]:
+        assert l["tranche"] in valeurs
+    assert len(ws._charts) == 1
+
+
+def test_tranches_protegees(client):
+    assert client.post("/api/tranches").status_code == 401

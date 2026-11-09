@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from .application import decision, dernier_vendredi
 from .donnees import lire_hebdo_texte
 from .moteur import Donnees, Parametres, backtest
+from . import tranches as _tranches
 from .reference_egale import backtest_parts_egales, libelle as libelle_parts_egales
 from .univers import ETF, MONETAIRES, REFERENCE
 
@@ -190,6 +191,35 @@ def lancer_backtest(texte_csv: str, req: Requete, avec_variantes: bool = True) -
     return resultat
 
 
+def lancer_tranches(texte_csv: str, req: Requete) -> dict:
+    """Backtest par semestres (horizon du jeu) sur tout l'historique, avec les paramètres du backtest.
+
+    La période début/fin du backtest ne s'applique pas : on prend toutes les tranches disponibles.
+    """
+    req.valider()
+    d = charger(texte_csv, req.univers)
+    try:
+        lignes = _tranches.toutes(d, req.parametres())
+        synthese = _tranches.synthese(lignes)
+        resume_variantes = [dict(nom=nom, synthese=_tranches.synthese(_tranches.toutes(d, pv)))
+                            for nom, pv in variantes(req)]
+    except (ValueError, TypeError, ZeroDivisionError, IndexError) as e:
+        raise ErreurRequete(f"Les tranches de 6 mois n'ont pas pu être calculées : {e}")
+    sortie = []
+    for l in lignes:
+        date_depart, etf_depart, refuge_depart = l["choix"][0]
+        sortie.append(dict(tranche=l["tranche"], debut=l["debut"].isoformat(), fin=l["fin"].isoformat(),
+                           semaines=l["semaines"], complete=l["semaines"] >= 24, moteur=l["moteur"], stoxx=l["stoxx"],
+                           parts_egales=l["parts_egales"], ecart=l["ecart"], perte_max=l["perte_max"],
+                           perte_max_stoxx=l["perte_max_stoxx"], depart=etf_depart, refuge_depart=refuge_depart,
+                           decisions=len(l["choix"])))
+    return dict(parametres=req.en_dict(), lignes=sortie, synthese=synthese, variantes=resume_variantes,
+                reference=REFERENCE, univers=list(d.noms),
+                note=("Chaque semestre repart d'un portefeuille vide, achète le top dès la première semaine, "
+                      "puis suit la règle chaque fin de mois. Sans frais. La Défense n'entre qu'une fois ses prix "
+                      "disponibles (2024)."))
+
+
 def libelle_periode(semaines: int) -> str:
     return {13: "3 mois", 26: "6 mois"}.get(semaines, f"{semaines} sem.")
 
@@ -226,5 +256,5 @@ def lancer_decision(texte_csv: str, req: Requete) -> dict:
     )
 
 
-__all__ = ["AVERTISSEMENTS", "DETENUS_DEFAUT", "ETF", "ErreurRequete", "Requete", "charger", "etat_donnees",
+__all__ = ["lancer_tranches", "AVERTISSEMENTS", "DETENUS_DEFAUT", "ETF", "ErreurRequete", "Requete", "charger", "etat_donnees",
            "lancer_backtest", "lancer_decision", "variantes"]

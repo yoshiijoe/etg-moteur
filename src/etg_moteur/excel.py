@@ -7,7 +7,7 @@ import io
 import math
 
 from openpyxl import Workbook
-from openpyxl.chart import LineChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.series import SeriesLabel
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
@@ -81,7 +81,7 @@ def _lisez_moi(wb: Workbook, bt: dict, dec: dict, etat: dict) -> None:
         ("Avertissements", GRAS),
         *[(a, None) for a in AVERTISSEMENTS],
         ("", None),
-        ("Onglets : Tableau de bord (mêmes chiffres et graphiques que le site), Lisez-moi, Resultats, Variantes, "
+        ("Onglets : Tableau de bord (mêmes chiffres et graphiques que le site), Tranches (6 mois), Lisez-moi, Resultats, Variantes, "
          "Decision, Serie, Poids, Prix_cloture, Prix_ouverture.", None),
         ("Prix_cloture et Prix_ouverture reprennent la mise en page du classeur de backtest de l'équipe : "
          "à copier à partir de la ligne 6, en collage spécial valeurs. Gris : période prolongée par un fonds proche. "
@@ -375,7 +375,115 @@ def _graphiques(ws, ws_serie, ancre: int, n: int) -> None:
         ws.add_chart(g, f"A{ligne + 1}")
 
 
-def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict) -> bytes:
+def _tranches(wb: Workbook, tr: dict) -> None:
+    """Onglet « Tranches » : mêmes chiffres, même graphique et mêmes tableaux que la section du site."""
+    ws = wb.create_sheet("Tranches", 1)
+    ws.sheet_view.showGridLines = False
+    s = tr["synthese"]
+    prm = tr["parametres"]
+    signal = f"{prm['court']} + {prm['long']}" if prm["utiliser_court"] else f"{prm['long']}"
+    ws["A1"] = "Tranches de 6 mois"
+    ws["A1"].font = TITRE
+    ws["A2"] = tr["note"]
+    ws["A2"].font = DISCRET
+    ws["A3"] = (f"{s['tranches']} tranches complètes · {'10 ETF' if prm['univers'] == '10' else '9 ETF'} · signal {signal} sem. "
+                f"· top {prm['top']}, tampon {prm['tampon']} · filtre {'oui' if prm['filtre'] else 'non'}")
+    ws["A3"].font = DISCRET
+    _ligne_tableau(ws, 5, ["", "Mesure", "Moteur", tr["reference"]])
+    lignes_synthese = [
+        ("Rendement moyen sur 6 mois", s["moteur_moyenne"], s["stoxx_moyenne"], "+0.0%;-0.0%;0.0%"),
+        ("Rendement médian sur 6 mois", s["moteur_mediane"], s["stoxx_mediane"], "+0.0%;-0.0%;0.0%"),
+        ("Tranches où le moteur fait mieux", s["part_bat_stoxx"], None, "0%"),
+        ("Pire tranche", s["pire"], s["stoxx_pire"], "+0.0%;-0.0%;0.0%"),
+        ("Meilleure tranche", s["meilleure"], s["stoxx_meilleure"], "+0.0%;-0.0%;0.0%"),
+        ("Écart moyen avec le STOXX 600", s["ecart_moyen"], None, "+0.0%;-0.0%;0.0%"),
+        ("Écart médian avec le STOXX 600", s["ecart_median"], None, "+0.0%;-0.0%;0.0%"),
+        ("Fiabilité de l'écart (t, 2 = solide)", s["t_ecart"], None, "0.00"),
+        ("Moyenne des 10 ETF à parts égales", s["parts_egales_moyenne"], None, "+0.0%;-0.0%;0.0%"),
+    ]
+    for k, (titre, a, b, fmt) in enumerate(lignes_synthese, 6):
+        ws.cell(k, 2, titre)
+        c = ws.cell(k, 3, a)
+        c.number_format, c.font = fmt, Font(bold=True)
+        if b is not None:
+            ws.cell(k, 4, b).number_format = fmt
+        for j in range(2, 5):
+            ws.cell(k, j).border = TRAIT
+    debut_detail = 6 + len(lignes_synthese) + 21
+    ws.cell(6 + len(lignes_synthese) + 1, 1, "Écart avec le STOXX 600, tranche par tranche").font = SOUS_TITRE
+
+    ws.cell(debut_detail - 1, 1, "Détail").font = SOUS_TITRE
+    titres = ["Tranche", "Du", "Au", "Semaines", "Moteur", tr["reference"], "Écart", "Parts égales", "Perte max",
+              "ETF achetés au départ"]
+    _ligne_tableau(ws, debut_detail, titres)
+    r = debut_detail
+    for l in tr["lignes"]:
+        r += 1
+        ws.cell(r, 1, l["tranche"])
+        ws.cell(r, 2, _date(l["debut"])).number_format = FORMAT_DATE
+        ws.cell(r, 3, _date(l["fin"])).number_format = FORMAT_DATE
+        ws.cell(r, 4, l["semaines"])
+        for j, cle in ((5, "moteur"), (6, "stoxx"), (7, "ecart"), (8, "parts_egales"), (9, "perte_max")):
+            ws.cell(r, j, l[cle]).number_format = "+0.0%;-0.0%;0.0%"
+        ecart = ws.cell(r, 7)
+        ecart.font = Font(bold=True, color=ORANGE) if l["ecart"] > 0 else Font(bold=True, color="6B6B6B")
+        depart = ", ".join(l["depart"]) or "aucun ETF"
+        if l["refuge_depart"]:
+            depart += f" + refuge {l['refuge_depart']:.0%}"
+        ws.cell(r, 10, depart)
+        for j in range(1, 11):
+            ws.cell(r, j).border = TRAIT
+    fin_detail = r
+
+    r += 2
+    ws.cell(r, 1, "Variantes sur 6 mois").font = SOUS_TITRE
+    r += 1
+    _ligne_tableau(ws, r, ["Variante", "", "Moyenne", "Médiane", "Écart moyen", "Bat le STOXX 600",
+                           "Bat les parts égales", "Pire tranche"])
+    for v in tr["variantes"]:
+        r += 1
+        x = v["synthese"]
+        ws.cell(r, 1, v["nom"])
+        for j, (cle, fmt) in enumerate((("moteur_moyenne", "+0.0%;-0.0%;0.0%"), ("moteur_mediane", "+0.0%;-0.0%;0.0%"),
+                                        ("ecart_moyen", "+0.0%;-0.0%;0.0%"), ("part_bat_stoxx", "0%"),
+                                        ("part_bat_parts_egales", "0%"), ("pire", "+0.0%;-0.0%;0.0%")), 3):
+            ws.cell(r, j, x[cle]).number_format = fmt
+        for j in range(1, 9):
+            ws.cell(r, j).border = TRAIT
+
+    g = BarChart()
+    g.type = "col"
+    g.height, g.width = 7.5, 22
+    g.legend = None
+    g.y_axis.number_format = "0%"
+    g.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E2E2E2"))
+    g.x_axis.delete = False
+    g.y_axis.delete = False
+    g.x_axis.tickLblPos = "low"
+    g.gapWidth = 40
+    g.add_data(Reference(ws, min_col=7, min_row=debut_detail + 1, max_row=fin_detail))
+    g.set_categories(Reference(ws, min_col=1, min_row=debut_detail + 1, max_row=fin_detail))
+    serie = g.series[0]
+    serie.tx = SeriesLabel(v="Écart moteur − STOXX 600")
+    serie.graphicalProperties.solidFill = ORANGE
+    serie.graphicalProperties.line.noFill = True
+    serie.invertIfNegative = True
+    from openpyxl.chart.marker import DataPoint
+    for k, l in enumerate(tr["lignes"]):
+        if l["ecart"] < 0:
+            point = DataPoint(idx=k)
+            point.graphicalProperties.solidFill = GRIS_COURBE
+            point.graphicalProperties.line.noFill = True
+            serie.dPt.append(point)
+    ws.add_chart(g, f"A{6 + len(lignes_synthese) + 2}")
+    for col, largeur in zip("ABCDEFGHIJ", (10, 30, 12, 16, 12, 16, 12, 14, 12, 52)):
+        ws.column_dimensions[col].width = largeur
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
+
+def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict, tr: dict | None = None) -> bytes:
     if not bt.get("variantes"):
         raise ErreurRequete("Le backtest doit contenir les variantes pour l'Excel.")
     wb = Workbook()
@@ -388,6 +496,8 @@ def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict) -> byte
     _poids(wb, bt)
     _prix(wb, texte_csv)
     _graphiques(tableau, wb["Serie"], ancre, len(bt["series"]["dates"]))
+    if tr:
+        _tranches(wb, tr)
     sortie = io.BytesIO()
     wb.save(sortie)
     return sortie.getvalue()

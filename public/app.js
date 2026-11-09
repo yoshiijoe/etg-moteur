@@ -322,9 +322,97 @@ $("btn-mode-annees")?.addEventListener("click", () => {
 let parametresAffiches = null;
 const memeParametres = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/* ---------- Tranches de 6 mois ---------- */
+
+const fEcart = (v) => fPct(v, 1, true);
+
+function cellule(ligne, texte, classe) {
+  const td = document.createElement("td"); td.textContent = texte; if (classe) td.className = classe; ligne.append(td); return td;
+}
+
+function afficherTranches(t) {
+  $("vide-tranches").hidden = true; $("tranches").hidden = false;
+  const s = t.synthese, prm = t.parametres;
+  const premiere = t.lignes[0], derniere = t.lignes[t.lignes.length - 1];
+  $("tranches-info").textContent = `${s.tranches} tranches complètes, de ${premiere.tranche} à ${derniere.tranche} · ` +
+    `${prm.univers === "10" ? "10 ETF" : "9 ETF"} · signal ${prm.utiliser_court ? prm.court + " + " + prm.long : prm.long} sem. · top ${prm.top}, tampon ${prm.tampon} · filtre ${prm.filtre ? "oui" : "non"}`;
+  const tuiles = [
+    ["Rendement moyen sur 6 mois", fEcart(s.moteur_moyenne), `STOXX 600 : ${fEcart(s.stoxx_moyenne)}`],
+    ["Rendement médian", fEcart(s.moteur_mediane), `STOXX 600 : ${fEcart(s.stoxx_mediane)}`],
+    ["Tranches où le moteur fait mieux", fPct(s.part_bat_stoxx, 0), `${Math.round(s.part_bat_stoxx * s.tranches)} sur ${s.tranches}`],
+    ["Pire tranche", fEcart(s.pire), `STOXX 600 : ${fEcart(s.stoxx_pire)}`],
+  ];
+  const bloc = $("tranches-chiffres"); bloc.innerHTML = "";
+  for (const [titre, valeur, ref] of tuiles) {
+    const div = document.createElement("div"); div.className = "chiffre";
+    div.innerHTML = `<div class="chiffre-titre"></div><div class="chiffre-valeur"></div><div class="chiffre-ref"></div>`;
+    div.children[0].textContent = titre; div.children[1].textContent = valeur; div.children[2].textContent = ref;
+    bloc.append(div);
+  }
+  barres($("graphique-tranches"), t.lignes.map((l) => l.tranche), t.lignes.map((l) => l.ecart));
+
+  const cv = $("table-tranches-variantes").tBodies[0]; cv.innerHTML = "";
+  for (const v of t.variantes) {
+    const tr = document.createElement("tr"), x = v.synthese;
+    cellule(tr, v.nom);
+    for (const [val, f] of [[x.moteur_moyenne, fEcart], [x.moteur_mediane, fEcart], [x.ecart_moyen, fEcart],
+      [x.part_bat_stoxx, (y) => fPct(y, 0)], [x.part_bat_parts_egales, (y) => fPct(y, 0)], [x.pire, fEcart]]) cellule(tr, f(val), "num");
+    cv.append(tr);
+  }
+  const cd = $("table-tranches").tBodies[0]; cd.innerHTML = "";
+  for (const l of [...t.lignes].reverse()) {
+    const tr = document.createElement("tr");
+    cellule(tr, l.complete ? l.tranche : `${l.tranche} (incomplète)`);
+    cellule(tr, String(l.semaines), "num");
+    cellule(tr, fEcart(l.moteur), "num"); cellule(tr, fEcart(l.stoxx), "num");
+    cellule(tr, fEcart(l.ecart), "num " + (l.ecart > 0 ? "acheter" : "vendre"));
+    cellule(tr, fEcart(l.parts_egales), "num"); cellule(tr, fPct(l.perte_max, 1), "num");
+    cellule(tr, (l.depart.join(", ") || "aucun ETF") + (l.refuge_depart ? ` + refuge ${fPct(l.refuge_depart, 0)}` : ""));
+    cd.append(tr);
+  }
+  $("tranches-note").textContent = t.note + " Écart moyen " + fEcart(s.ecart_moyen) + ", médian " + fEcart(s.ecart_median) +
+    `, fiabilité t = ${fNum(s.t_ecart, 2)} (un écart est considéré comme solide à partir d'environ 2).`;
+}
+
+/* Graphique en bâtons : un bâton par tranche, orange si le moteur fait mieux, gris sinon. */
+const batons = new Map();
+function barres(conteneur, libelles, valeurs) { batons.set(conteneur, { libelles, valeurs }); tracerBarres(conteneur); }
+
+function tracerBarres(conteneur) {
+  const g = batons.get(conteneur);
+  if (!g || !conteneur.clientWidth) return;
+  const { libelles, valeurs } = g;
+  const L = conteneur.clientWidth, H = L < 520 ? 200 : 260, m = { h: 12, b: 24, g: 52, d: 8 };
+  const graduations = echelle(Math.min(0, ...valeurs), Math.max(0, ...valeurs), 4);
+  const mini = graduations[0], maxi = graduations[graduations.length - 1];
+  const y = (v) => m.h + (1 - (v - mini) / (maxi - mini)) * (H - m.h - m.b);
+  const pas = (L - m.g - m.d) / valeurs.length, largeur = Math.max(1, pas * 0.7);
+  const svg = noeud("svg", { viewBox: `0 0 ${L} ${H}`, width: L, height: H });
+  for (const v of graduations) {
+    svg.append(noeud("line", { x1: m.g, x2: L - m.d, y1: y(v), y2: y(v), class: v === 0 ? "zero" : "grille" }));
+    svg.append(noeud("text", { x: m.g - 8, y: y(v) + 4, "text-anchor": "end", class: "axe" }, fPct(v, 0)));
+  }
+  valeurs.forEach((v, i) => {
+    const x = m.g + i * pas + (pas - largeur) / 2;
+    const rect = noeud("rect", { x, y: Math.min(y(v), y(0)), width: largeur, height: Math.max(1, Math.abs(y(v) - y(0))), class: v > 0 ? "baton-plus" : "baton-moins" });
+    rect.append(noeud("title", {}, `${libelles[i]} : ${fEcart(v)}`));
+    svg.append(rect);
+    const an = libelles[i].slice(0, 4);
+    if (libelles[i].endsWith("S1") && (an % 2 === 0 || pas > 18)) svg.append(noeud("text", { x: x + largeur / 2, y: H - 6, "text-anchor": "middle", class: "axe" }, an));
+  });
+  conteneur.querySelector("svg")?.remove();
+  conteneur.prepend(svg);
+}
+window.addEventListener("resize", () => batons.forEach((_, c) => tracerBarres(c)));
+
+async function chargerTranches(p) {
+  try { afficherTranches(await (await post("/api/tranches", p)).json()); }
+  catch (e) { if (e.statut !== 401) { $("vide-tranches").hidden = false; $("tranches").hidden = true; $("vide-tranches").textContent = e.message; } }
+}
+
 async function lancerBacktest() {
   const p = parametres();
-  const b = await (await post("/api/backtest", p)).json();
+  const [b] = await Promise.all([post("/api/backtest", p).then((r) => r.json()), chargerTranches(p)]);
   afficherBacktest(b);
   parametresAffiches = p;
   message(`Backtest terminé : ${b.periode.semaines} semaines, du ${fDate(b.periode.debut)} au ${fDate(b.periode.fin)}.`);
