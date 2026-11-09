@@ -155,7 +155,7 @@ def test_backtest_par_defaut(avec_prix):
     assert j["series"]["moteur"][0] == 100 and j["series"]["reference"][0] == 100
     assert min(j["series"]["perte_moteur"]) == pytest.approx(j["moteur"]["perte_max"])
     assert [v["nom"] for v in j["variantes"]] == ["Base", "6 mois seuls", "Top 3", "Sans filtre", "Sans zone tampon",
-                                                  "STOXX Europe 600"]
+                                                  "10 ETF à parts égales", "STOXX Europe 600"]
     assert j["variantes"][0]["mesures"] == j["moteur"]
     assert len(j["poids"]["colonnes"]) == 12 and len(j["poids"]["valeurs"]) == len(j["poids"]["dates"])
     assert {"ann", "sharpe", "perte_max", "rotation", "hhi", "beta", "vol_ex_ante", "diversification"} <= set(j["moteur"])
@@ -222,7 +222,7 @@ def test_excel(avec_prix):
     j = avec_prix.post("/api/backtest", json={"vendredi": "2026-10-30"}).json()
     assert res["B2"].value == pytest.approx(j["moteur"]["ann"]) and res["B2"].number_format == "0.00%"
     assert res["C2"].value == pytest.approx(j["reference"]["ann"])
-    assert wb["Variantes"].max_row == 7
+    assert wb["Variantes"].max_row == 8
     dec = wb["Decision"]
     assert [c.value for c in dec[1]] == ["Rang", "ETF", "3 mois", "6 mois", "Signal", "Détenu", "Décision"]
     assert dec.max_row >= 11

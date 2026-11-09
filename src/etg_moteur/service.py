@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from .application import decision, dernier_vendredi
 from .donnees import lire_hebdo_texte
 from .moteur import Donnees, Parametres, backtest
+from .reference_egale import backtest_parts_egales, libelle as libelle_parts_egales
 from .univers import ETF, MONETAIRES, REFERENCE
 
 AVERTISSEMENTS = [
@@ -157,7 +158,12 @@ def lancer_backtest(texte_csv: str, req: Requete, avec_variantes: bool = True) -
     p = req.parametres()
     m = _lancer(d, p, req.debut, fin)
 
+    try:
+        egal = backtest_parts_egales(d, p, req.debut, fin)
+    except (ValueError, TypeError, ZeroDivisionError):
+        raise ErreurRequete("La référence à parts égales n'a pas pu être calculée sur cette période : certains prix manquent.")
     valeurs, ref = _valeurs(m["rendements"]), _valeurs(m["rendements_reference"])
+    val_egal = _valeurs(egal["rendements"])
     t_debut = d.dates.index(dates_periode[0])
     colonnes = list(d.noms) + MONETAIRES
     resultat = dict(
@@ -167,7 +173,9 @@ def lancer_backtest(texte_csv: str, req: Requete, avec_variantes: bool = True) -
         moteur=_mesures(m),
         reference={**m["reference"], "nom": REFERENCE},
         series=dict(dates=[x.isoformat() for x in dates_periode], moteur=valeurs, reference=ref,
-                    perte_moteur=_pertes(valeurs), perte_reference=_pertes(ref)),
+                    perte_moteur=_pertes(valeurs), perte_reference=_pertes(ref),
+                    parts_egales=val_egal, perte_parts_egales=_pertes(val_egal)),
+        parts_egales=dict(nom=libelle_parts_egales(len(d.noms)), **_mesures(egal)),
         poids=dict(colonnes=colonnes, dates=[x.isoformat() for x in dates_periode],
                    valeurs=[m["poids"][t_debut + i] for i in range(len(dates_periode))]),
     )
@@ -176,6 +184,7 @@ def lancer_backtest(texte_csv: str, req: Requete, avec_variantes: bool = True) -
         for nom, pv in variantes(req):
             mv = m if nom == "Base" else _lancer(d, pv, req.debut, fin)
             lignes.append(dict(nom=nom, mesures=_mesures(mv)))
+        lignes.append(dict(nom=libelle_parts_egales(len(d.noms)), mesures=_mesures(egal)))
         lignes.append(dict(nom=REFERENCE, mesures=dict(m["reference"])))
         resultat["variantes"] = lignes
     return resultat

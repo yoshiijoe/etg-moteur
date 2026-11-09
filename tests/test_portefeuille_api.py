@@ -198,14 +198,14 @@ def faux_yahoo(monkeypatch):
     fin = dt.date(2026, 11, 9)
     cas = {
         "SAN.PA": (dt.date(2015, 1, 5), 50.0), "SAP.DE": (dt.date(2015, 1, 5), 120.0),
-        "NEUF.PA": (dt.date(2026, 5, 4), 40.0), "PENNY.PA": (dt.date(2015, 1, 5), 0.5),
+        "NEUF.PA": (dt.date(2026, 5, 4), 40.0), "PENNY.PA": (dt.date(2015, 1, 5), 0.02),
     }
 
     def faux(symbole, dernier, pause=0.0):
         if symbole not in cas:
             return {"existe": False}
         debut, niveau = cas[symbole]
-        corps = json_marche(jours_ouvres(debut, fin), hash(symbole) % 1000, 0.0003, "EUR", niveau)
+        corps = json_marche(jours_ouvres(debut, fin), sum(map(ord, symbole)), 0.0003, "EUR", niveau)
         return dict(existe=True, **pp.resume_symbole(corps, pp.grille(dernier)))
     monkeypatch.setattr(pp, "telecharger_candidat", faux)
 
