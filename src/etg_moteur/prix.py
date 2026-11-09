@@ -18,6 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo
 
 from .univers import SERIES, SYMBOLES
@@ -71,20 +72,39 @@ def telecharger_symbole(symbole: str, essais: int = 3, attente_429: float = 20, 
 
 
 def telecharger(symboles: Iterable[str] = SYMBOLES, pause: float = 1.2,
-                rapport: Callable[[str, str], None] | None = None) -> tuple[dict[str, bytes], dict[str, str]]:
-    """Télécharge tous les symboles. Renvoie (JSON bruts, erreurs par symbole)."""
+                rapport: Callable[[str, str], None] | None = None,
+                paralleles: int = 1) -> tuple[dict[str, bytes], dict[str, str]]:
+    """Télécharge tous les symboles. Renvoie (JSON bruts, erreurs par symbole).
+
+    `paralleles` > 1 télécharge plusieurs symboles à la fois (le site, pour tenir dans la durée d'une fonction).
+    """
+    symboles = list(symboles)
     bruts: dict[str, bytes] = {}
     erreurs: dict[str, str] = {}
-    for s in symboles:
+
+    def un(s: str):
         try:
-            bruts[s] = telecharger_symbole(s)
+            corps = telecharger_symbole(s)
             if rapport:
                 rapport(s, "ok")
+            return s, corps, None
         except ErreurYahoo as e:
-            erreurs[s] = str(e)
             if rapport:
                 rapport(s, f"ÉCHEC {e.code or ''}".strip())
-        time.sleep(pause)
+            return s, None, e
+        finally:
+            time.sleep(pause)
+
+    if paralleles > 1:
+        with ThreadPoolExecutor(max_workers=paralleles) as pool:
+            resultats = list(pool.map(un, symboles))
+    else:
+        resultats = [un(s) for s in symboles]
+    for s, corps, e in resultats:
+        if e is None:
+            bruts[s] = corps
+        else:
+            erreurs[s] = str(e)
     return bruts, erreurs
 
 
