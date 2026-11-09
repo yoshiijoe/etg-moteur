@@ -341,6 +341,17 @@ def enregistrer_portefeuille(corps: PortefeuilleIn):
     return vue
 
 
+@app.post("/api/portefeuille/sync", dependencies=[Depends(connecte)])
+def synchroniser_nextwise_api():
+    """Synchronise les positions réelles depuis NextWise vers le stockage privé."""
+    try:
+        from etg_moteur import nextwise
+        nextwise.synchroniser()
+        return _vue(_contexte(None))
+    except Exception as e:
+        raise Erreur(f"Échec de synchronisation NextWise : {e}", 502)
+
+
 @app.post("/api/portefeuille/restaurer", dependencies=[Depends(connecte)])
 def restaurer_portefeuille(corps: RestaurationIn):
     st = stockage.ouvrir()

@@ -155,6 +155,18 @@ $("pf-ajouter").addEventListener("click", () => {
 
 $("pf-annuler").addEventListener("click", async () => { pfMessage(""); await chargerPortefeuille(); });
 
+$("pf-sync")?.addEventListener("click", () => avecPf($("pf-sync"), "Synchronisation…", async () => {
+  pfMessage("Connexion à NextWise et récupération des positions…");
+  try {
+    const v = await (await post("/api/portefeuille/sync", {})).json();
+    appliquerVue(v);
+    await recalculer();
+    pfMessage("Positions synchronisées avec succès depuis NextWise.");
+  } catch (e) {
+    pfMessage(e.message, true);
+  }
+}));
+
 $("pf-enregistrer").addEventListener("click", () => avecPf($("pf-enregistrer"), "Enregistrement…", async () => {
   const v = await (await post("/api/portefeuille", corpsPortefeuille())).json();
   appliquerVue(v);

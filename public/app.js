@@ -208,10 +208,9 @@ function afficherBacktest(b) {
     bloc.append(div);
   }
   const s = b.series;
-  const nomEgal = b.parts_egales.nom;
-  $("legende-egal").textContent = nomEgal;
-  courbes($("graphique-valeur"), s.dates, [{ v: s.parts_egales, c: "egal", n: nomEgal }, { v: s.reference, c: "ref", n: "STOXX 600" }, { v: s.moteur, c: "moteur", n: "Moteur" }], (v) => fNum(v, 1), false);
-  courbes($("graphique-perte"), s.dates, [{ v: s.perte_parts_egales, c: "egal", n: nomEgal }, { v: s.perte_reference, c: "ref", n: "STOXX 600" }, { v: s.perte_moteur, c: "moteur", n: "Moteur" }], (v) => fPct(v, 1), true);
+  dernierBacktest = b;
+  majGraphiqueValeur();
+  courbes($("graphique-perte"), s.dates, [{ v: s.perte_parts_egales, c: "egal", n: b.parts_egales.nom }, { v: s.perte_reference, c: "ref", n: "STOXX 600" }, { v: s.perte_moteur, c: "moteur", n: "Moteur" }], (v) => fPct(v, 1), true);
   const th = $("table-variantes").tHead; th.innerHTML = "";
   const tr = document.createElement("tr");
   const colonnes = b.colonnes_mesures;
@@ -231,6 +230,93 @@ function afficherBacktest(b) {
     corps.append(ligne);
   }
 }
+
+let modeCourbe = "continu";
+let dernierBacktest = null;
+
+function majGraphiqueValeur() {
+  if (!dernierBacktest) return;
+  const b = dernierBacktest;
+  const s = b.series;
+  const conteneur = $("graphique-valeur");
+  const legende = $("legende-valeur");
+  const recap = $("recap-annees");
+
+  $("btn-mode-continu")?.classList.toggle("actif", modeCourbe === "continu");
+  $("btn-mode-annees")?.classList.toggle("actif", modeCourbe === "annees");
+
+  if (modeCourbe === "continu") {
+    if (recap) recap.hidden = true;
+    const nomEgal = b.parts_egales.nom;
+    if (legende) legende.innerHTML = `<span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600 <span class="trait egal"></span><span>${nomEgal}</span>`;
+    courbes(conteneur, s.dates, [
+      { v: s.parts_egales, c: "egal", n: nomEgal },
+      { v: s.reference, c: "ref", n: "STOXX 600" },
+      { v: s.moteur, c: "moteur", n: "Moteur" }
+    ], (v) => fNum(v, 1), false);
+  } else {
+    if (recap) recap.hidden = false;
+    const parAnnee = {};
+    s.dates.forEach((d, i) => {
+      const an = d.slice(0, 4);
+      if (!parAnnee[an]) parAnnee[an] = [];
+      parAnnee[an].push({ d, v: s.moteur[i] });
+    });
+
+    const anneesTriees = Object.keys(parAnnee).sort();
+    const maxSem = Math.max(...Object.values(parAnnee).map((pts) => pts.length));
+    const datesAxe = Array.from({ length: maxSem }, (_, i) => `S${String(i + 1).padStart(2, "0")}`);
+
+    const seriesAnnees = [];
+    if (recap) recap.innerHTML = "";
+
+    for (const an of anneesTriees) {
+      const pts = parAnnee[an];
+      const v0 = pts[0].v;
+      const valsNorm = pts.map((p) => (p.v / v0) * 100);
+      const perfAn = pts[pts.length - 1].v / v0 - 1;
+
+      let som = 100, ddMax = 0;
+      for (const val of valsNorm) {
+        if (val > som) som = val;
+        const dd = val / som - 1;
+        if (dd < ddMax) ddMax = dd;
+      }
+
+      const classe = an === "2024" ? "an2024" : an === "2025" ? "an2025" : "an2026";
+      seriesAnnees.push({ v: valsNorm, c: classe, n: `Moteur ${an}` });
+
+      if (recap) {
+        const carte = document.createElement("div");
+        carte.className = "carte-annee";
+        carte.innerHTML = `
+          <div class="carte-annee-titre"><span>${an}</span><span class="trait ${classe}"></span></div>
+          <div class="carte-annee-val">${fPct(perfAn, 2, true)}</div>
+          <div class="carte-annee-dd">Perte max : ${fPct(ddMax, 1)} · ${pts.length} sem.</div>
+        `;
+        recap.append(carte);
+      }
+    }
+
+    if (legende) {
+      legende.innerHTML = anneesTriees.map((an) => {
+        const classe = an === "2024" ? "an2024" : an === "2025" ? "an2025" : "an2026";
+        return `<span class="trait ${classe}"></span>Année ${an} (base 100)`;
+      }).join(" ");
+    }
+
+    courbes(conteneur, datesAxe, seriesAnnees, (v) => fNum(v, 1), false);
+  }
+}
+
+$("btn-mode-continu")?.addEventListener("click", () => {
+  modeCourbe = "continu";
+  majGraphiqueValeur();
+});
+$("btn-mode-annees")?.addEventListener("click", () => {
+  modeCourbe = "annees";
+  majGraphiqueValeur();
+});
 
 /* Paramètres du backtest affiché : l'Excel doit toujours correspondre à l'écran. */
 let parametresAffiches = null;
@@ -276,13 +362,14 @@ function tracer(conteneur) {
   if (!g || !conteneur.clientWidth) return;
   const { dates, series, format, depuisZero } = g;
   const L = conteneur.clientWidth, H = L < 520 ? 220 : 300, m = { h: 12, b: 24, g: 52, d: 8 };
-  const toutes = series.flatMap((s) => s.v);
+  const toutes = series.flatMap((s) => s.v.filter((v) => v != null));
+  if (!toutes.length) return;
   let mini = Math.min(...toutes), maxi = Math.max(...toutes);
   if (depuisZero) maxi = 0;
   const graduations = echelle(mini, maxi, 4);
   mini = Math.min(mini, graduations[0]); maxi = Math.max(maxi, graduations[graduations.length - 1]);
-  const x = (i) => m.g + (i / (dates.length - 1)) * (L - m.g - m.d);
-  const y = (v) => m.h + (1 - (v - mini) / (maxi - mini)) * (H - m.h - m.b);
+  const x = (i) => m.g + (i / Math.max(1, dates.length - 1)) * (L - m.g - m.d);
+  const y = (v) => m.h + (1 - (v - mini) / (maxi - mini || 1)) * (H - m.h - m.b);
   const svg = noeud("svg", { viewBox: `0 0 ${L} ${H}`, width: L, height: H });
   for (const v of graduations) {
     svg.append(noeud("line", { x1: m.g, x2: L - m.d, y1: y(v), y2: y(v), class: "grille" }));
@@ -290,12 +377,26 @@ function tracer(conteneur) {
   }
   let derniere = null;
   dates.forEach((d, i) => {
-    const an = d.slice(0, 4);
-    if (an !== derniere) { derniere = an; if (i > 0 && x(i) < L - 30 && x(i) > m.g + 20) svg.append(noeud("text", { x: x(i), y: H - 6, "text-anchor": "middle", class: "axe" }, an)); }
+    if (d.startsWith("S")) {
+      if (i === 0 || i === 12 || i === 25 || i === 38 || i === dates.length - 1) {
+        svg.append(noeud("text", { x: x(i), y: H - 6, "text-anchor": "middle", class: "axe" }, d));
+      }
+    } else {
+      const an = d.slice(0, 4);
+      if (an !== derniere) {
+        derniere = an;
+        if (i > 0 && x(i) < L - 30 && x(i) > m.g + 20) svg.append(noeud("text", { x: x(i), y: H - 6, "text-anchor": "middle", class: "axe" }, an));
+      }
+    }
   });
   for (const s of series) {
-    const d = s.v.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
-    svg.append(noeud("path", { d, class: `courbe ${s.c}` }));
+    let chemin = "";
+    for (let i = 0; i < s.v.length; i++) {
+      const val = s.v[i];
+      if (val == null) continue;
+      chemin += (chemin ? "L" : "M") + `${x(i).toFixed(1)},${y(val).toFixed(1)}`;
+    }
+    if (chemin) svg.append(noeud("path", { d: chemin, class: `courbe ${s.c}` }));
   }
   const curseur = noeud("line", { y1: m.h, y2: H - m.b, class: "curseur", visibility: "hidden" });
   svg.append(curseur);
@@ -305,10 +406,13 @@ function tracer(conteneur) {
   const bouger = (ev) => {
     const r = svg.getBoundingClientRect();
     const px = ev.clientX - r.left;
-    const i = Math.max(0, Math.min(dates.length - 1, Math.round(((px - m.g) / (L - m.g - m.d)) * (dates.length - 1))));
+    const i = Math.max(0, Math.min(dates.length - 1, Math.round(((px - m.g) / Math.max(1, L - m.g - m.d)) * (dates.length - 1))));
     curseur.setAttribute("x1", x(i)); curseur.setAttribute("x2", x(i)); curseur.setAttribute("visibility", "visible");
+    const pointsAffiches = [...series].reverse().filter((s) => s.v[i] != null);
+    if (!pointsAffiches.length) return;
     bulle.hidden = false;
-    bulle.textContent = `${fDate(dates[i])} · ` + [...series].reverse().map((s) => `${s.n} ${format(s.v[i])}`).join(" · ");
+    const labelDate = dates[i].startsWith("S") ? `Semaine ${dates[i].slice(1)}` : fDate(dates[i]);
+    bulle.textContent = `${labelDate} · ` + pointsAffiches.map((s) => `${s.n} ${format(s.v[i])}`).join(" · ");
     bulle.style.left = Math.max(0, Math.min(L - bulle.offsetWidth, x(i) - bulle.offsetWidth / 2)) + "px";
   };
   svg.addEventListener("pointermove", bouger);
@@ -399,25 +503,32 @@ async function demarrer() {
     if (!e.disponible) { message("Aucun prix en mémoire. Cliquer sur « Mettre à jour les prix », ou importer un CSV."); return; }
     await chargerDecision();
     await lancerBacktest();
+    if (typeof chargerPortefeuille === "function") await chargerPortefeuille();
     if (typeof apresDemarrage === "function") apresDemarrage();
   } catch (err) {
     if (err.statut !== 401) { $("application").hidden = false; message(err.message, true); }
   }
 }
 
-/* ---------- Navigation : #moteur et #portefeuille ---------- */
+/* ---------- Navigation fluide : Moteur et Portefeuille ---------- */
 
 function afficherPage() {
-  const page = location.hash === "#portefeuille" ? "portefeuille" : "moteur";
+  const hash = location.hash;
+  const page = hash === "#portefeuille" ? "portefeuille" : "moteur";
   $("application").dataset.page = page;
-  $("page-moteur").hidden = page !== "moteur";
-  $("page-portefeuille").hidden = page !== "portefeuille";
+  $("page-moteur").hidden = false;
+  $("page-portefeuille").hidden = false;
   for (const p of ["moteur", "portefeuille"]) {
     const a = $("nav-" + p);
     if (page === p) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
+  if (hash === "#portefeuille") {
+    $("page-portefeuille")?.scrollIntoView({ behavior: "smooth" });
+  } else if (hash === "#moteur") {
+    $("page-moteur")?.scrollIntoView({ behavior: "smooth" });
+  }
   if (typeof pageAffichee === "function") pageAffichee(page);
-  if (page === "moteur") for (const id of ["graphique-valeur", "graphique-perte"]) tracer($(id));
+  for (const id of ["graphique-valeur", "graphique-perte"]) tracer($(id));
 }
 window.addEventListener("hashchange", afficherPage);
 afficherPage();

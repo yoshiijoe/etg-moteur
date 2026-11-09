@@ -122,6 +122,22 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); m
 .graphique .courbe { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .graphique .courbe.moteur { stroke: var(--accent); }
 .graphique .courbe.ref { stroke: var(--gris-courbe); }
+.graphique .courbe.an2024 { stroke: var(--gris-courbe); stroke-dasharray: 4 4; opacity: .7; stroke-width: 1.5; }
+.graphique .courbe.an2025 { stroke: var(--gris-courbe); stroke-width: 1.75; }
+.graphique .courbe.an2026 { stroke: var(--accent); stroke-width: 2.2; }
+.trait.an2024 { background: repeating-linear-gradient(90deg, var(--gris-courbe) 0 4px, transparent 4px 7px); margin-left: 12px; opacity: .7; }
+.trait.an2025 { background: var(--gris-courbe); margin-left: 12px; }
+.trait.an2026 { background: var(--accent); margin-left: 12px; }
+.ligne-graphique-entete { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ligne-graphique-entete h2 { margin: 0; }
+.modes-graphique { display: flex; gap: 6px; }
+.modes-graphique .bouton { padding: 4px 10px; font-size: 12px; }
+.modes-graphique .bouton.actif { background: var(--texte); color: var(--fond); border-color: var(--texte); }
+.recap-annees { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+.carte-annee { border: 1px solid var(--trait); border-radius: var(--rayon); padding: 10px 14px; }
+.carte-annee-titre { font-size: 13px; color: var(--secondaire); display: flex; justify-content: space-between; align-items: center; }
+.carte-annee-val { font-family: var(--mono); font-size: 20px; font-weight: 500; margin: 4px 0 2px; }
+.carte-annee-dd { font-family: var(--mono); font-size: 12px; color: var(--secondaire); }
 .graphique .curseur { stroke: var(--texte); stroke-width: 1; opacity: .4; }
 .bulle {
   position: absolute; top: 0; pointer-events: none; background: var(--fond); border: 1px solid var(--trait-fort); border-radius: var(--rayon);

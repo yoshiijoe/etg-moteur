@@ -108,9 +108,16 @@
       <div id="resultats" hidden>
         <p id="periode" class="info"></p>
         <div class="chiffres" id="chiffres"></div>
-        <h2>Valeur en base 100</h2>
-        <div class="legende"><span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600 <span class="trait egal"></span><span id="legende-egal">10 ETF à parts égales</span></div>
+        <div class="ligne-graphique-entete">
+          <h2>Valeur en base 100</h2>
+          <div class="modes-graphique">
+            <button id="btn-mode-continu" class="bouton actif" type="button">Historique continu</button>
+            <button id="btn-mode-annees" class="bouton discret" type="button">Comparaison par année (Redeem annuel)</button>
+          </div>
+        </div>
+        <div class="legende" id="legende-valeur"><span class="trait moteur"></span>Moteur <span class="trait ref"></span>STOXX Europe 600 <span class="trait egal"></span><span id="legende-egal">10 ETF à parts égales</span></div>
         <div id="graphique-valeur" class="graphique" role="img" aria-label="Valeur du moteur, du STOXX 600 et des ETF à parts égales en base 100"></div>
+        <div id="recap-annees" class="recap-annees" hidden></div>
         <h2>Perte depuis le sommet</h2>
         <div id="graphique-perte" class="graphique" role="img" aria-label="Perte du moteur depuis son plus haut"></div>
         <h2>Variantes</h2>
@@ -119,12 +126,13 @@
     </section>
     </div>
 
-    <div id="page-portefeuille" hidden>
+    <div id="page-portefeuille">
       <section class="bloc" aria-labelledby="t-positions">
         <h1 id="t-positions">Positions</h1>
-        <p class="aide" id="pf-intro">Saisissez le nombre de titres détenus et le cash : les poids actuels se calculent avec les derniers cours. Sans saisie, les poids cibles de la page Stratégie sont utilisés.</p>
+        <p class="aide" id="pf-intro">Saisissez le nombre de titres détenus et le cash, ou synchronisez directement depuis NextWise. Sans saisie, les poids cibles de la page Stratégie sont utilisés.</p>
         <div class="actions-boutons pf-actions">
-          <button id="pf-enregistrer" class="bouton principal" type="button">Enregistrer les positions</button>
+          <button id="pf-sync" class="bouton principal" type="button" title="Synchronise les titres et le cash depuis NextWise">🔄 Synchroniser NextWise</button>
+          <button id="pf-enregistrer" class="bouton" type="button">Enregistrer les positions</button>
           <button id="pf-moteur" class="bouton" type="button">Aligner la poche moteur sur la décision du mois</button>
           <button id="pf-ajouter" class="bouton" type="button">Ajouter une ligne</button>
           <button id="pf-annuler" class="bouton discret" type="button">Annuler les modifications</button>
