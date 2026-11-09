@@ -197,9 +197,10 @@ class Parametres(BaseModel):
     filtre: bool = True
     detenus: list[str] | None = Field(None, max_length=10)
     vendredi: dt.date | None = None
+    source_tranches: Literal["etf", "msci"] = "etf"
 
     def requete(self) -> service.Requete:
-        valeurs = self.model_dump()
+        valeurs = self.model_dump(exclude={"source_tranches"})
         if valeurs["detenus"] is None:
             valeurs["detenus"] = list(service.DETENUS_DEFAUT)
         return service.Requete(**valeurs)
@@ -217,19 +218,44 @@ def decision(corps: Parametres | None = None):
     return service.lancer_decision(texte, (corps or Parametres()).requete())
 
 
+def _texte_tranches(source: str) -> str:
+    """Prix utilisés pour les tranches : ceux du site (ETF) ou les indices MSCI envoyés à part."""
+    if source == "etf":
+        return _prix_stockes()[0]
+    trouve = stockage.lire_version(stockage.ouvrir(), stockage.PREFIXE_PRIX_MSCI, "csv")
+    if trouve is None:
+        raise Erreur("Les indices MSCI ne sont pas encore chargés sur le site. "
+                     "Les envoyer avec scripts/envoyer_msci.py, ou choisir la source « ETF ».", 404)
+    return trouve[0].decode("utf-8")
+
+
 @app.post("/api/tranches", dependencies=[Depends(connecte)])
 def tranches(corps: Parametres | None = None):
-    texte, _ = _prix_stockes()
-    return service.lancer_tranches(texte, (corps or Parametres()).requete())
+    corps = corps or Parametres()
+    return service.lancer_tranches(_texte_tranches(corps.source_tranches), corps.requete(), corps.source_tranches)
+
+
+@app.post("/api/importer-msci", dependencies=[Depends(connecte)])
+async def importer_msci(request: Request):
+    """Range un CSV hebdomadaire construit par scripts/construire_prix_msci.py (même format que les prix du site)."""
+    corps = await request.body()
+    if not corps or len(corps) > 6_000_000:
+        raise Erreur("Fichier vide ou trop gros (6 Mo au maximum).")
+    texte = corps.decode("utf-8-sig")
+    service.lancer_tranches(texte, service.Requete(), "msci")  # refuse un fichier que le moteur ne sait pas lire
+    etat = stockage.ecrire_version(stockage.ouvrir(), stockage.PREFIXE_PRIX_MSCI, "csv", texte.encode("utf-8"),
+                                   "text/csv", "import", conserver=2)
+    return dict(ok=True, **etat, **service.etat_donnees(texte))
 
 
 @app.post("/api/excel", dependencies=[Depends(connecte)])
 def telecharger_excel(corps: Parametres | None = None):
     texte, etat = _prix_stockes()
-    req = (corps or Parametres()).requete()
+    corps = corps or Parametres()
+    req = corps.requete()
     bt = service.lancer_backtest(texte, req)
     dec = service.lancer_decision(texte, req)
-    tr = service.lancer_tranches(texte, req)
+    tr = service.lancer_tranches(_texte_tranches(corps.source_tranches), req, corps.source_tranches)
     contenu = excel.construire_classeur(texte, bt, dec, {**etat, **service.etat_donnees(texte)}, tr)
     return Response(contenu, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{excel.nom_fichier(dec)}"',

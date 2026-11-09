@@ -191,11 +191,26 @@ def lancer_backtest(texte_csv: str, req: Requete, avec_variantes: bool = True) -
     return resultat
 
 
-def lancer_tranches(texte_csv: str, req: Requete) -> dict:
+SOURCES_TRANCHES = {
+    "etf": dict(libelle="ETF du moteur (depuis 2008)", reference=REFERENCE,
+                note="Prix des ETF du moteur, prolongés par des fonds proches avant leur lancement."),
+    "msci": dict(libelle="Indices MSCI Europe (depuis 2001)", reference="MSCI Europe",
+                 note=("Indices sectoriels MSCI Europe, dividendes nets réinvestis, en euros ; monétaire EONIA puis €STR. "
+                       "Les indices n'ont pas d'ouverture : achat simulé à la clôture du lundi. "
+                       "Correspondances : Banks, Energy, Aerospace & Defense (dès 2014), Information Technology, "
+                       "Industrials, Materials, Health Care, Communication Services, Utilities, Consumer Staples.")),
+}
+
+
+def lancer_tranches(texte_csv: str, req: Requete, source: str = "etf") -> dict:
     """Backtest par semestres (horizon du jeu) sur tout l'historique, avec les paramètres du backtest.
 
     La période début/fin du backtest ne s'applique pas : on prend toutes les tranches disponibles.
+    `source` : "etf" (prix du site) ou "msci" (indices MSCI Europe, depuis 2001).
     """
+    if source not in SOURCES_TRANCHES:
+        raise ErreurRequete("Source inconnue pour les tranches : choisir les ETF ou les indices MSCI.")
+    infos = SOURCES_TRANCHES[source]
     req.valider()
     d = charger(texte_csv, req.univers)
     try:
@@ -213,11 +228,12 @@ def lancer_tranches(texte_csv: str, req: Requete) -> dict:
                            parts_egales=l["parts_egales"], ecart=l["ecart"], perte_max=l["perte_max"],
                            perte_max_stoxx=l["perte_max_stoxx"], depart=etf_depart, refuge_depart=refuge_depart,
                            decisions=len(l["choix"])))
-    return dict(parametres=req.en_dict(), lignes=sortie, synthese=synthese, variantes=resume_variantes,
-                reference=REFERENCE, univers=list(d.noms),
+    return dict(parametres=req.en_dict() | {"source_tranches": source}, lignes=sortie, synthese=synthese,
+                variantes=resume_variantes, reference=infos["reference"], source=source,
+                source_libelle=infos["libelle"], univers=list(d.noms),
                 note=("Chaque semestre repart d'un portefeuille vide, achète le top dès la première semaine, "
                       "puis suit la règle chaque fin de mois. Sans frais. La Défense n'entre qu'une fois ses prix "
-                      "disponibles (2024)."))
+                      "disponibles. " + infos["note"]))
 
 
 def libelle_periode(semaines: int) -> str:

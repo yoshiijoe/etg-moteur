@@ -211,3 +211,5 @@ td.ecart, td.detail { color: var(--secondaire); }
 .graphique .baton-moins { fill: var(--gris-courbe); }
 .graphique .zero { stroke: var(--trait-fort); stroke-width: 1; }
 td.num.acheter { color: var(--texte); }
+label.champ-inline:has(#source-tranches) { white-space: nowrap; margin: 4px 0 12px; }
+#source-tranches { max-width: 100%; }

@@ -386,7 +386,8 @@ def _tranches(wb: Workbook, tr: dict) -> None:
     ws["A1"].font = TITRE
     ws["A2"] = tr["note"]
     ws["A2"].font = DISCRET
-    ws["A3"] = (f"{s['tranches']} tranches complètes · {'10 ETF' if prm['univers'] == '10' else '9 ETF'} · signal {signal} sem. "
+    ws["A3"] = (f"{s['tranches']} tranches complètes · source : {tr.get('source_libelle', 'ETF du moteur')} · "
+                f"{'10 ETF' if prm['univers'] == '10' else '9 ETF'} · signal {signal} sem. "
                 f"· top {prm['top']}, tampon {prm['tampon']} · filtre {'oui' if prm['filtre'] else 'non'}")
     ws["A3"].font = DISCRET
     _ligne_tableau(ws, 5, ["", "Mesure", "Moteur", tr["reference"]])
@@ -396,8 +397,8 @@ def _tranches(wb: Workbook, tr: dict) -> None:
         ("Tranches où le moteur fait mieux", s["part_bat_stoxx"], None, "0%"),
         ("Pire tranche", s["pire"], s["stoxx_pire"], "+0.0%;-0.0%;0.0%"),
         ("Meilleure tranche", s["meilleure"], s["stoxx_meilleure"], "+0.0%;-0.0%;0.0%"),
-        ("Écart moyen avec le STOXX 600", s["ecart_moyen"], None, "+0.0%;-0.0%;0.0%"),
-        ("Écart médian avec le STOXX 600", s["ecart_median"], None, "+0.0%;-0.0%;0.0%"),
+        (f"Écart moyen avec {tr['reference']}", s["ecart_moyen"], None, "+0.0%;-0.0%;0.0%"),
+        (f"Écart médian avec {tr['reference']}", s["ecart_median"], None, "+0.0%;-0.0%;0.0%"),
         ("Fiabilité de l'écart (t, 2 = solide)", s["t_ecart"], None, "0.00"),
         ("Moyenne des 10 ETF à parts égales", s["parts_egales_moyenne"], None, "+0.0%;-0.0%;0.0%"),
     ]
@@ -410,7 +411,7 @@ def _tranches(wb: Workbook, tr: dict) -> None:
         for j in range(2, 5):
             ws.cell(k, j).border = TRAIT
     debut_detail = 6 + len(lignes_synthese) + 21
-    ws.cell(6 + len(lignes_synthese) + 1, 1, "Écart avec le STOXX 600, tranche par tranche").font = SOUS_TITRE
+    ws.cell(6 + len(lignes_synthese) + 1, 1, f"Écart avec {tr['reference']}, tranche par tranche").font = SOUS_TITRE
 
     ws.cell(debut_detail - 1, 1, "Détail").font = SOUS_TITRE
     titres = ["Tranche", "Du", "Au", "Semaines", "Moteur", tr["reference"], "Écart", "Parts égales", "Perte max",
@@ -438,7 +439,7 @@ def _tranches(wb: Workbook, tr: dict) -> None:
     r += 2
     ws.cell(r, 1, "Variantes sur 6 mois").font = SOUS_TITRE
     r += 1
-    _ligne_tableau(ws, r, ["Variante", "", "Moyenne", "Médiane", "Écart moyen", "Bat le STOXX 600",
+    _ligne_tableau(ws, r, ["Variante", "", "Moyenne", "Médiane", "Écart moyen", f"Bat {tr['reference']}",
                            "Bat les parts égales", "Pire tranche"])
     for v in tr["variantes"]:
         r += 1
@@ -464,7 +465,7 @@ def _tranches(wb: Workbook, tr: dict) -> None:
     g.add_data(Reference(ws, min_col=7, min_row=debut_detail + 1, max_row=fin_detail))
     g.set_categories(Reference(ws, min_col=1, min_row=debut_detail + 1, max_row=fin_detail))
     serie = g.series[0]
-    serie.tx = SeriesLabel(v="Écart moteur − STOXX 600")
+    serie.tx = SeriesLabel(v=f"Écart moteur − {tr['reference']}")
     serie.graphicalProperties.solidFill = ORANGE
     serie.graphicalProperties.line.noFill = True
     serie.invertIfNegative = True

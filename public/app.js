@@ -61,6 +61,7 @@ function parametres() {
     detenus: [...document.querySelectorAll("#detenus input:checked")].map((c) => c.value),
   };
   if ($("vendredi").value) corps.vendredi = $("vendredi").value;
+  if ($("source-tranches")) corps.source_tranches = $("source-tranches").value;
   return corps;
 }
 
@@ -332,15 +333,17 @@ function cellule(ligne, texte, classe) {
 
 function afficherTranches(t) {
   $("vide-tranches").hidden = true; $("tranches").hidden = false;
-  const s = t.synthese, prm = t.parametres;
+  const s = t.synthese, prm = t.parametres, ref = t.reference;
+  $("titre-graphique-tranches").textContent = `Écart avec ${ref}, tranche par tranche`;
+  $("th-tranches-bat").textContent = `Bat ${ref}`; $("th-tranches-ref").textContent = ref;
   const premiere = t.lignes[0], derniere = t.lignes[t.lignes.length - 1];
-  $("tranches-info").textContent = `${s.tranches} tranches complètes, de ${premiere.tranche} à ${derniere.tranche} · ` +
+  $("tranches-info").textContent = `${s.tranches} tranches complètes, de ${premiere.tranche} à ${derniere.tranche} · ${t.source_libelle} · ` +
     `${prm.univers === "10" ? "10 ETF" : "9 ETF"} · signal ${prm.utiliser_court ? prm.court + " + " + prm.long : prm.long} sem. · top ${prm.top}, tampon ${prm.tampon} · filtre ${prm.filtre ? "oui" : "non"}`;
   const tuiles = [
-    ["Rendement moyen sur 6 mois", fEcart(s.moteur_moyenne), `STOXX 600 : ${fEcart(s.stoxx_moyenne)}`],
-    ["Rendement médian", fEcart(s.moteur_mediane), `STOXX 600 : ${fEcart(s.stoxx_mediane)}`],
+    ["Rendement moyen sur 6 mois", fEcart(s.moteur_moyenne), `${ref} : ${fEcart(s.stoxx_moyenne)}`],
+    ["Rendement médian", fEcart(s.moteur_mediane), `${ref} : ${fEcart(s.stoxx_mediane)}`],
     ["Tranches où le moteur fait mieux", fPct(s.part_bat_stoxx, 0), `${Math.round(s.part_bat_stoxx * s.tranches)} sur ${s.tranches}`],
-    ["Pire tranche", fEcart(s.pire), `STOXX 600 : ${fEcart(s.stoxx_pire)}`],
+    ["Pire tranche", fEcart(s.pire), `${ref} : ${fEcart(s.stoxx_pire)}`],
   ];
   const bloc = $("tranches-chiffres"); bloc.innerHTML = "";
   for (const [titre, valeur, ref] of tuiles) {
@@ -404,6 +407,7 @@ function tracerBarres(conteneur) {
   conteneur.prepend(svg);
 }
 window.addEventListener("resize", () => batons.forEach((_, c) => tracerBarres(c)));
+$("source-tranches").addEventListener("change", () => chargerTranches(parametres()));
 
 async function chargerTranches(p) {
   try { afficherTranches(await (await post("/api/tranches", p)).json()); }

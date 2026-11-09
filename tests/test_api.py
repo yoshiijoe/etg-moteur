@@ -317,3 +317,21 @@ def test_tranches_api_et_excel_identiques(avec_prix):
 
 def test_tranches_protegees(client):
     assert client.post("/api/tranches").status_code == 401
+
+
+def test_tranches_msci_absentes_puis_importees(avec_prix, csv_texte):
+    r = avec_prix.post("/api/tranches", json={"source_tranches": "msci"})
+    assert r.status_code == 404 and "MSCI" in r.json()["erreur"]
+    r = avec_prix.post("/api/importer-msci", content=csv_texte.encode(), headers={"content-type": "text/csv"})
+    assert r.status_code == 200, r.text
+    t = avec_prix.post("/api/tranches", json={"source_tranches": "msci"}).json()
+    assert t["reference"] == "MSCI Europe" and t["source"] == "msci"
+    etf = avec_prix.post("/api/tranches", json={}).json()
+    assert etf["source"] == "etf" and etf["reference"] != "MSCI Europe"
+    x = avec_prix.post("/api/excel", json={"source_tranches": "msci"})
+    ws = openpyxl.load_workbook(io.BytesIO(x.content))["Tranches"]
+    assert "MSCI" in str(ws["A3"].value)
+
+
+def test_import_msci_protege(client):
+    assert client.post("/api/importer-msci", content=b"x").status_code == 401

@@ -120,6 +120,7 @@ def ecrire_prix(stockage, texte_csv: str, source: str, maintenant: dt.datetime |
 
 PREFIXE_PRIX_PORTEFEUILLE = "prix_portefeuille/"
 PREFIXE_POSITIONS = "positions/"
+PREFIXE_PRIX_MSCI = "prix_msci/"  # indices MSCI Europe hebdomadaires, pour les tranches depuis 2001
 CONSERVER_POSITIONS = 10  # historique des 10 dernières versions
 
 
