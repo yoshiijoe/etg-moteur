@@ -5,6 +5,7 @@ Toutes les routes /api sont protégées par le cookie de session, sauf la connex
 """
 import datetime as dt
 import hmac
+import json
 import os
 import pathlib
 import sys
@@ -18,7 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from etg_moteur import excel, prix, prix_portefeuille, service, session, stockage
+from etg_moteur import composition, excel, prix, prix_portefeuille, service, service_portefeuille as sp, session, stockage
 from etg_moteur.univers import SYMBOLES
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -113,7 +114,12 @@ def mettre_a_jour_prix() -> dict:
     Les prix des lignes du portefeuille complet sont téléchargés en même temps et rangés à part : si eux seuls
     échouent, le CSV du moteur est quand même mis à jour et l'état le signale.
     """
-    a_telecharger = list(dict.fromkeys([*SYMBOLES, *prix_portefeuille.SYMBOLES_PORTEFEUILLE]))
+    try:
+        positions = sp.lire_positions(stockage.ouvrir())
+    except (stockage.ErreurStockage, ValueError):
+        positions = None
+    extras = sp.symboles_supplementaires(positions[0] if positions else None)
+    a_telecharger = list(dict.fromkeys([*SYMBOLES, *prix_portefeuille.SYMBOLES_PORTEFEUILLE, *extras]))
     bruts, erreurs = prix.telecharger(a_telecharger, pause=0.3, paralleles=4)
     erreurs_moteur = {s: m for s, m in erreurs.items() if s in SYMBOLES}
     if erreurs_moteur:
@@ -131,11 +137,11 @@ def mettre_a_jour_prix() -> dict:
     etat = stockage.ecrire_prix(st, texte, "yahoo", maintenant)
     pf = dict(ok=False, erreurs=sorted(erreurs.values())[:5])
     try:
-        document = prix_portefeuille.construire(bruts, dernier, maintenant)
+        document = prix_portefeuille.construire(bruts, dernier, maintenant, extras=extras)
         pf_etat = stockage.ecrire_version(st, stockage.PREFIXE_PRIX_PORTEFEUILLE, "json",
                                           prix_portefeuille.en_texte(document).encode("utf-8"), "application/json",
                                           "yahoo", stockage.CONSERVER, maintenant)
-        pf = dict(ok=True, mise_a_jour=pf_etat["mise_a_jour"], erreurs=[])
+        pf = dict(ok=True, mise_a_jour=pf_etat["mise_a_jour"], erreurs=[], avertissements=document["avertissements"])
     except prix_portefeuille.ErreurPrixPortefeuille as e:
         pf["message"] = str(e)
     return dict(disponible=True, avertissements=service.AVERTISSEMENTS, portefeuille=pf, **etat, **etat_csv)
@@ -221,6 +227,166 @@ def telecharger_excel(corps: Parametres | None = None):
     return Response(contenu, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{excel.nom_fichier(dec)}"',
                              "Cache-Control": "no-store"})
+
+
+# --- Simulateur du portefeuille complet ----------------------------------------------------------------------
+
+class LigneIn(BaseModel):
+    code: str = Field(max_length=12)
+    nom: str = Field("", max_length=80)
+    poche: str = Field("Autre", max_length=12)
+    type: str = Field("action", max_length=20)
+    symbole: str | None = Field(None, max_length=20)
+    isin: str | None = Field(None, max_length=12)
+    secteur: str = Field("", max_length=60)
+    secteur_verifie: bool = False
+    scenario: str = Field("", max_length=1)
+    poids: float = Field(0.0, ge=0, le=1)
+    quantite: float = Field(0.0, ge=0)
+    devise: str = Field("EUR", max_length=3)
+
+
+class PortefeuilleIn(BaseModel):
+    lignes: list[LigneIn] = Field(max_length=sp.MAX_LIGNES)
+    cash: float | None = Field(None, ge=0)
+
+
+class ContexteIn(BaseModel):
+    portefeuille: PortefeuilleIn | None = None     # brouillon non enregistré ; sinon le portefeuille enregistré
+    fenetre: int | None = Field(None, ge=26, le=520)
+
+
+class CorrelationsIn(ContexteIn):
+    fenetre: Literal[52, 180] = 52
+
+
+class CandidatIn(BaseModel):
+    symbole: str = Field(max_length=20)
+    nom: str = Field("", max_length=80)
+    poids: float | None = Field(None, ge=0, le=1)
+    secteur: str = Field("", max_length=60)
+    scenario: str | None = Field(None, max_length=1)
+    type: str | None = Field(None, max_length=20)
+
+
+class SimulationIn(ContexteIn):
+    remplace: str = Field(max_length=12)
+    candidats: list[CandidatIn] = Field(min_length=1, max_length=3)
+
+
+class RestaurationIn(BaseModel):
+    nom: str = Field(max_length=120)
+
+
+def _prix_portefeuille() -> dict:
+    trouve = stockage.lire_version(stockage.ouvrir(), stockage.PREFIXE_PRIX_PORTEFEUILLE, "json")
+    if trouve is None:
+        raise Erreur("Pas de prix pour les lignes du portefeuille. Cliquer sur « Mettre à jour les prix ».", 404)
+    try:
+        doc = prix_portefeuille.lire(trouve[0])
+    except prix_portefeuille.ErreurPrixPortefeuille as e:
+        raise Erreur(str(e), 404)
+    doc["_etat"] = trouve[1]
+    return doc
+
+
+def _saisie(entree: PortefeuilleIn | None) -> dict | None:
+    """Brouillon envoyé par la page, sinon positions enregistrées, sinon None (poids cibles)."""
+    if entree is not None:
+        return entree.model_dump()
+    trouve = sp.lire_positions(stockage.ouvrir())
+    return trouve[0] if trouve else None
+
+
+def _contexte(entree: PortefeuilleIn | None) -> sp.Contexte:
+    texte, _ = _prix_stockes()
+    doc = _prix_portefeuille()
+    try:
+        return sp.construire_contexte(texte, doc, _saisie(entree))
+    except (sp.ErreurPortefeuille, composition.ErreurComposition, service.ErreurRequete) as e:
+        raise Erreur(str(e), 400)
+
+
+def _vue(ctx: sp.Contexte, doc: dict | None = None) -> dict:
+    st = stockage.ouvrir()
+    trouve = sp.lire_positions(st)
+    versions = stockage.lister_versions(st, stockage.PREFIXE_POSITIONS, "json")
+    doc = doc or _prix_portefeuille()
+    return sp.vue_portefeuille(ctx, trouve[1] if trouve else None, versions, doc["_etat"] | {"derniere_date": doc["dates"][-1]})
+
+
+@app.get("/api/portefeuille", dependencies=[Depends(connecte)])
+def lire_portefeuille():
+    return _vue(_contexte(None))
+
+
+@app.post("/api/portefeuille", dependencies=[Depends(connecte)])
+def enregistrer_portefeuille(corps: PortefeuilleIn):
+    try:
+        ctx = sp.construire_contexte(_prix_stockes()[0], _prix_portefeuille(), corps.model_dump())  # valide avant d'écrire
+        sp.ecrire_positions(stockage.ouvrir(), corps.model_dump())
+    except (sp.ErreurPortefeuille, composition.ErreurComposition, service.ErreurRequete) as e:
+        raise Erreur(str(e), 400)
+    return _vue(ctx)
+
+
+@app.post("/api/portefeuille/restaurer", dependencies=[Depends(connecte)])
+def restaurer_portefeuille(corps: RestaurationIn):
+    st = stockage.ouvrir()
+    if corps.nom not in {v["nom"] for v in stockage.lister_versions(st, stockage.PREFIXE_POSITIONS, "json")}:
+        raise Erreur("Cette version n'existe plus.", 404)
+    contenu = st.lire(corps.nom)
+    if contenu is None:
+        raise Erreur("Cette version n'existe plus.", 404)
+    try:
+        sp.ecrire_positions(st, json.loads(contenu))
+    except (sp.ErreurPortefeuille, ValueError) as e:
+        raise Erreur(str(e), 400)
+    return _vue(_contexte(None))
+
+
+@app.post("/api/portefeuille/moteur", dependencies=[Depends(connecte)])
+def aligner_moteur(corps: ContexteIn | None = None):
+    """Brouillon : la poche moteur remplacée par la décision du mois. Rien n'est enregistré."""
+    texte, _ = _prix_stockes()
+    saisie = _saisie(corps.portefeuille if corps else None) or sp.saisie_par_defaut()
+    detenus = [l["nom"] for l in saisie["lignes"] if l.get("poche") == "Moteur" and l["nom"] in service.ETF] or None
+    try:
+        dec = service.lancer_decision(texte, service.Requete(detenus=detenus or list(service.DETENUS_DEFAUT)))
+        return sp.aligner_moteur(saisie, dec)
+    except (sp.ErreurPortefeuille, composition.ErreurComposition, service.ErreurRequete) as e:
+        raise Erreur(str(e), 400)
+
+
+@app.post("/api/indicateurs", dependencies=[Depends(connecte)])
+def indicateurs(corps: ContexteIn | None = None):
+    corps = corps or ContexteIn()
+    ctx = _contexte(corps.portefeuille)
+    try:
+        return sp.calculer_indicateurs(ctx, corps.fenetre)
+    except sp.ErreurPortefeuille as e:
+        raise Erreur(str(e), 400)
+
+
+@app.post("/api/correlations", dependencies=[Depends(connecte)])
+def correlations(corps: CorrelationsIn | None = None):
+    corps = corps or CorrelationsIn()
+    ctx = _contexte(corps.portefeuille)
+    try:
+        return sp.calculer_correlations(ctx, corps.fenetre)
+    except sp.ErreurPortefeuille as e:
+        raise Erreur(str(e), 400)
+
+
+@app.post("/api/simulation", dependencies=[Depends(connecte)])
+def simulation(corps: SimulationIn):
+    doc = _prix_portefeuille()
+    ctx = _contexte(corps.portefeuille)
+    try:
+        return sp.simuler(ctx, corps.remplace, [c.model_dump() for c in corps.candidats],
+                          dt.date.fromisoformat(doc["dates"][-1]), corps.fenetre)
+    except (sp.ErreurPortefeuille, composition.ErreurComposition) as e:
+        raise Erreur(str(e), 400)
 
 
 @app.middleware("http")

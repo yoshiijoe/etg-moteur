@@ -98,8 +98,12 @@ def resume_symbole(corps: bytes | str, vendredis: list[dt.date], fx: dict | None
 
 
 def construire(bruts: dict, dernier: dt.date, maintenant: dt.datetime | None = None,
-               semaines: int = SEMAINES_CONSERVEES, depuis: dt.date = DEBUT_RECENT) -> dict:
-    """Document JSON des prix du portefeuille. Lève ErreurPrixPortefeuille si un symbole manque ou est illisible."""
+               semaines: int = SEMAINES_CONSERVEES, depuis: dt.date = DEBUT_RECENT, extras: tuple | list = ()) -> dict:
+    """Document JSON des prix du portefeuille. Lève ErreurPrixPortefeuille si un symbole manque ou est illisible.
+
+    `extras` : symboles ajoutés par l'équipe dans ses positions ; un extra manquant ou illisible n'arrête rien,
+    il est signalé dans `avertissements`.
+    """
     maintenant = maintenant or dt.datetime.now(dt.UTC)
     manquants = [s for s in SYMBOLES_PORTEFEUILLE + SYMBOLES_MOTEUR_RECENTS if s not in bruts]
     if manquants:
@@ -115,6 +119,21 @@ def construire(bruts: dict, dernier: dt.date, maintenant: dt.datetime | None = N
         derniers[s] = dict(r["dernier"], devise=r["devise"])
         monnaie = r["devise"]
         recents[s] = _quotidiens_euros(prix.lire_brut(bruts[s]), monnaie, fx, depuis)
+    avertissements = []
+    for s in extras:
+        if s in series:
+            continue
+        if s not in bruts:
+            avertissements.append(f"{s} : cours non téléchargés")
+            continue
+        try:
+            r = resume_symbole(bruts[s], vendredis, fx)
+        except ErreurPrixPortefeuille as e:
+            avertissements.append(f"{s} : {e}")
+            continue
+        series[s] = r["hebdo"]
+        derniers[s] = dict(r["dernier"], devise=r["devise"])
+        recents[s] = r["recent"]
     for s in SYMBOLES_MOTEUR_RECENTS:
         cours = prix.lire_brut(bruts[s])
         monnaie = devise(bruts[s])
@@ -125,7 +144,7 @@ def construire(bruts: dict, dernier: dt.date, maintenant: dt.datetime | None = N
         derniers[s] = dict(date=jour.isoformat(), cours_eur=recents[s][jour.isoformat()][1],
                            cours_local=round(cours[jour][1], 4), devise=monnaie)
     return dict(genere=maintenant.astimezone(dt.UTC).isoformat(timespec="seconds"), dates=[d.isoformat() for d in vendredis],
-                series=series, dernier=derniers, recent=recents)
+                series=series, dernier=derniers, recent=recents, avertissements=avertissements)
 
 
 def en_texte(document: dict) -> str:

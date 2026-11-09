@@ -124,7 +124,7 @@ CONSERVER_POSITIONS = 10  # historique des 10 dernières versions
 
 
 def _modele(prefixe: str, extension: str):
-    return re.compile(rf"^{re.escape(prefixe)}(\d{{8}}T\d{{6}}Z)_(yahoo|import|saisie)\.{extension}$")
+    return re.compile(rf"^{re.escape(prefixe)}(\d{{8}}T\d{{6}}(?:\d{{3}})?Z)_(yahoo|import|saisie)\.{extension}$")
 
 
 def lire_version(stockage, prefixe: str, extension: str) -> tuple[bytes, dict] | None:
@@ -139,7 +139,7 @@ def lire_version(stockage, prefixe: str, extension: str) -> tuple[bytes, dict] |
 
 def _etat_famille(nom: str, modele) -> dict:
     horodatage, source = modele.match(nom).groups()
-    quand = dt.datetime.strptime(horodatage, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.UTC)
+    quand = dt.datetime.strptime(horodatage[:15] + "Z", "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.UTC)
     return dict(mise_a_jour=quand.isoformat(timespec="seconds"), source=SOURCES[source])
 
 
@@ -147,7 +147,8 @@ def ecrire_version(stockage, prefixe: str, extension: str, contenu: bytes, type_
                    conserver: int, maintenant: dt.datetime | None = None) -> dict:
     """Range une nouvelle version, supprime les plus anciennes (on en garde `conserver`). Renvoie l'état."""
     maintenant = (maintenant or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
-    nom = f"{prefixe}{maintenant:%Y%m%dT%H%M%SZ}_{source}.{extension}"
+    # Millisecondes dans le nom : deux enregistrements dans la même seconde ne s'écrasent pas
+    nom = f"{prefixe}{maintenant:%Y%m%dT%H%M%S}{maintenant.microsecond // 1000:03d}Z_{source}.{extension}"
     stockage.ecrire(nom, contenu, type_contenu)
     modele = _modele(prefixe, extension)
     anciens = sorted(n for n in stockage.lister(prefixe) if modele.match(n) and n != nom)
