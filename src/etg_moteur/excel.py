@@ -6,7 +6,9 @@ import datetime as dt
 import io
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.series import SeriesLabel
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from .service import AVERTISSEMENTS, COLONNES_MESURES, ErreurRequete, charger, libelle_periode
@@ -18,6 +20,25 @@ GRIS = PatternFill("solid", fgColor="D9D9D9")
 ROUGE = PatternFill("solid", fgColor="F4B6B6")
 FORMAT_DATE = "dd/mm/yyyy"
 FORMATS = {"pct": "0.00%", "num": "0.000"}
+ORANGE = "FF5B00"
+GRIS_COURBE = "9A9A9A"
+TITRE = Font(bold=True, size=16)
+SOUS_TITRE = Font(bold=True, size=12)
+DISCRET = Font(color="6B6B6B")
+TRAIT = Border(bottom=Side(style="thin", color="E2E2E2"))
+TRAIT_FORT = Border(bottom=Side(style="thin", color="0A0A0A"))
+MARQUE = {"acheter": "+ acheter", "garder": "garder", "vendre": "− vendre", "—": "—"}  # pas de « = » : Excel le lirait comme une formule
+# Mêmes chiffres clés et mêmes arrondis que l'en-tête du backtest sur le site
+CHIFFRES_CLES = [("ann", "Rendement par an", "0.00%"), ("sharpe", "Sharpe", "0.00"),
+                 ("perte_max", "Perte max", "0.00%"), ("rotation", "Rotation", "0.00")]
+
+
+def _maintenant() -> dt.datetime:
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("Europe/Paris"))
+    except Exception:  # pragma: no cover - base de fuseaux absente
+        return dt.datetime.now(dt.UTC)
 
 
 def _entetes(ws, ligne: int, titres: list, largeurs: list | None = None) -> None:
@@ -35,13 +56,12 @@ def _date(iso: str) -> dt.date:
 
 
 def _lisez_moi(wb: Workbook, bt: dict, dec: dict, etat: dict) -> None:
-    ws = wb.active
-    ws.title = "Lisez-moi"
+    ws = wb.create_sheet("Lisez-moi")
     prm = bt["parametres"]
     prix_au = etat.get("dernier_vendredi") or dec["derniere_date"]
     lignes = [
         ("Moteur ETG : résultats du backtest et décision du mois", GRAS),
-        (f"Fichier généré le {dt.date.today():%d/%m/%Y}.", None),
+        (f"Fichier généré le {_maintenant():%d/%m/%Y à %H:%M}, avec les prix enregistrés sur le site à ce moment-là.", None),
         (f"Prix au {_date(prix_au):%d/%m/%Y} · Source : Yahoo Finance · prix non validés par l'équipe.", None),
         ("", None),
         ("Paramètres utilisés", GRAS),
@@ -58,7 +78,8 @@ def _lisez_moi(wb: Workbook, bt: dict, dec: dict, etat: dict) -> None:
         ("Avertissements", GRAS),
         *[(a, None) for a in AVERTISSEMENTS],
         ("", None),
-        ("Onglets : Resultats, Variantes, Decision, Serie, Poids, Prix_cloture, Prix_ouverture.", None),
+        ("Onglets : Tableau de bord (mêmes chiffres et graphiques que le site), Lisez-moi, Resultats, Variantes, "
+         "Decision, Serie, Poids, Prix_cloture, Prix_ouverture.", None),
         ("Prix_cloture et Prix_ouverture reprennent la mise en page du classeur de backtest de l'équipe : "
          "à copier à partir de la ligne 6, en collage spécial valeurs. Gris : période prolongée par un fonds proche. "
          "Rouge : aucune donnée.", None),
@@ -122,6 +143,7 @@ def _serie(wb: Workbook, bt: dict) -> None:
     s = bt["series"]
     _entetes(ws, 1, ["Date", "Moteur (base 100)", "STOXX 600 (base 100)", "Perte du moteur depuis le sommet",
                      "Perte du STOXX 600 depuis le sommet"], [14, 20, 22, 30, 32])
+    ws.auto_filter.ref = f"A1:E{len(s['dates']) + 1}"
     for i, x in enumerate(s["dates"]):
         ws.cell(i + 2, 1, _date(x)).number_format = FORMAT_DATE
         ws.cell(i + 2, 2, s["moteur"][i]).number_format = "0.00"
@@ -185,10 +207,151 @@ def _prix(wb: Workbook, texte_csv: str) -> None:
             ws.column_dimensions[get_column_letter(j)].width = 16
 
 
+def _ligne_tableau(ws, ligne: int, titres: list) -> None:
+    for j, t in enumerate(titres, 1):
+        c = ws.cell(ligne, j, t)
+        c.font = GRAS
+        c.border = TRAIT_FORT
+        c.alignment = Alignment(horizontal="left" if j <= 2 else "right", wrap_text=True)
+
+
+def _tableau_de_bord(wb: Workbook, bt: dict, dec: dict, etat: dict) -> tuple:
+    """Premier onglet : reprend la page du site (décision, chiffres clés, variantes). Graphiques ajoutés ensuite."""
+    ws = wb.active
+    ws.title = "Tableau de bord"
+    ws.sheet_view.showGridLines = False
+    prix_au = etat.get("dernier_vendredi") or dec["derniere_date"]
+    source = etat.get("source", "Yahoo Finance")
+    ws["A1"] = "Moteur ETG"
+    ws["A1"].font = TITRE
+    maj = etat.get("mise_a_jour")
+    maj_txt = ""
+    if maj:
+        try:
+            maj_txt = f" · mis à jour le {dt.datetime.fromisoformat(maj):%d/%m/%Y %H:%M} UTC"
+        except ValueError:
+            maj_txt = ""
+    ws["A2"] = f"Prix au {_date(prix_au):%d/%m/%Y} · {source} · non validés{maj_txt}"
+    ws["A2"].font = DISCRET
+    ws["A3"] = f"Fichier généré le {_maintenant():%d/%m/%Y à %H:%M}"
+    ws["A3"].font = DISCRET
+
+    # Décision du mois
+    ws["A5"] = "Décision du mois"
+    ws["A5"].font = SOUS_TITRE
+    ws["A6"] = f"Clôture du vendredi {_date(dec['date']):%d/%m/%Y}"
+    if dec["apercu"]:
+        ws["A7"] = (f"Aperçu : décision officielle le {_date(dec['date_officielle']):%d/%m/%Y}, "
+                    "avec la clôture de ce jour-là.")
+        ws["A7"].font = Font(bold=True, color=ORANGE)
+    _ligne_tableau(ws, 8, ["Rang", "ETF", dec["libelle_court"], dec["libelle_long"], "Signal", "Détenu", "Décision"])
+    ligne = 9
+    for l in dec["lignes"]:
+        ws.cell(ligne, 1, l["rang"]).alignment = Alignment(horizontal="left")
+        etf = ws.cell(ligne, 2, l["etf"])
+        if l["retenu"]:
+            etf.font = Font(bold=True)
+        for j, cle in ((3, "court"), (4, "long"), (5, "signal")):
+            if l[cle] is not None:
+                ws.cell(ligne, j, l[cle]).number_format = "+0.0%;-0.0%;0.0%"
+        ws.cell(ligne, 6, "oui" if l["detenu"] else "").alignment = Alignment(horizontal="right")
+        action = ws.cell(ligne, 7, MARQUE.get(l["action"], l["action"]))
+        action.alignment = Alignment(horizontal="right")
+        if l["action"] == "acheter":
+            action.font = Font(bold=True, color=ORANGE)
+        elif l["action"] == "vendre":
+            action.font = Font(bold=True, color="6B6B6B")
+        elif l["action"] == "—":
+            action.font = DISCRET
+        for j in range(1, 8):
+            ws.cell(ligne, j).border = TRAIT
+        ligne += 1
+    places = dec["refuges"] + dec["cash"]
+    ws.cell(ligne, 1, (f"Places remplacées par le filtre : {dec['refuges']} ETF monétaire(s), {dec['cash']} en cash. "
+                       if places else "") + f"Chaque ligne retenue pèse {dec['poids']:.0%} de la poche moteur."
+                      " Vérifier les cours du jour avant de passer les ordres.").font = DISCRET
+
+    # Backtest
+    ligne += 2
+    ws.cell(ligne, 1, "Backtest").font = SOUS_TITRE
+    prm = bt["parametres"]
+    signal = (f"{prm['court']} + {prm['long']}" if prm["utiliser_court"] else f"{prm['long']}")
+    ws.cell(ligne + 1, 1, f"Du {_date(bt['periode']['debut']):%d/%m/%Y} au {_date(bt['periode']['fin']):%d/%m/%Y} · "
+                          f"{bt['periode']['semaines']} semaines · {'10 ETF' if prm['univers'] == '10' else '9 ETF'} · "
+                          f"signal {signal} sem. · top {prm['top']}, tampon {prm['tampon']} · "
+                          f"filtre {'oui' if prm['filtre'] else 'non'}").font = DISCRET
+    ligne += 3
+    _ligne_tableau(ws, ligne, ["", "Mesure", "Moteur", "STOXX Europe 600"])
+    for k, (cle, titre, fmt) in enumerate(CHIFFRES_CLES, 1):
+        ws.cell(ligne + k, 2, titre)
+        m = ws.cell(ligne + k, 3, bt["moteur"].get(cle))
+        m.number_format, m.font = fmt, Font(bold=True)
+        r = bt["reference"].get(cle)
+        ref = ws.cell(ligne + k, 4, r if r is not None else "sans objet")
+        ref.number_format, ref.alignment = fmt, Alignment(horizontal="right")
+        for j in range(2, 5):
+            ws.cell(ligne + k, j).border = TRAIT
+    ligne += len(CHIFFRES_CLES) + 2
+    ancre_graphiques = ligne
+    ligne += 36  # place des deux graphiques
+
+    ws.cell(ligne, 1, "Variantes").font = SOUS_TITRE
+    ligne += 1
+    _ligne_tableau(ws, ligne, ["Variante", ""] + [l for _, l, _ in COLONNES_MESURES])
+    for v in bt["variantes"]:
+        ligne += 1
+        nom = ws.cell(ligne, 1, v["nom"])
+        reference = v["nom"].startswith("STOXX")
+        if reference:
+            nom.font = DISCRET
+        for j, (cle, _, fmt) in enumerate(COLONNES_MESURES, 3):
+            x = v["mesures"].get(cle)
+            if x is not None:
+                c = ws.cell(ligne, j, x)
+                c.number_format = FORMATS[fmt]
+                if reference:
+                    c.font = DISCRET
+        for j in range(1, len(COLONNES_MESURES) + 3):
+            ws.cell(ligne, j).border = TRAIT
+    ligne += 2
+    for a in AVERTISSEMENTS:
+        ws.cell(ligne, 1, a).font = DISCRET
+        ligne += 1
+    for col, largeur in zip("ABCDEFGHIJK", (8, 24, 14, 18, 14, 12, 14, 16, 16, 16, 18)):
+        ws.column_dimensions[col].width = largeur
+    return ws, ancre_graphiques
+
+
+def _graphiques(ws, ws_serie, ancre: int, n: int) -> None:
+    """Deux courbes natives Excel, comme sur le site : moteur en orange, STOXX 600 en gris."""
+    dates = Reference(ws_serie, min_col=1, min_row=2, max_row=n + 1)
+    for titre, colonnes, format_axe, ligne in (("Valeur en base 100", (2, 3), "0", ancre),
+                                               ("Perte depuis le plus haut", (4, 5), "0%", ancre + 18)):
+        g = LineChart()
+        g.title = titre
+        g.height, g.width = 8.5, 24
+        g.legend.position = "b"
+        g.y_axis.number_format = format_axe
+        g.x_axis.number_format = "mm/yyyy"
+        g.x_axis.delete = False
+        g.y_axis.delete = False
+        for col, couleur, nom, epaisseur in ((colonnes[0], ORANGE, "Moteur", 22000),
+                                             (colonnes[1], GRIS_COURBE, "STOXX Europe 600", 15000)):
+            g.add_data(Reference(ws_serie, min_col=col, min_row=2, max_row=n + 1))
+            serie = g.series[-1]
+            serie.tx = SeriesLabel(v=nom)
+            serie.graphicalProperties.line.solidFill = couleur
+            serie.graphicalProperties.line.width = epaisseur
+            serie.smooth = False
+        g.set_categories(dates)
+        ws.add_chart(g, f"A{ligne}")
+
+
 def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict) -> bytes:
     if not bt.get("variantes"):
         raise ErreurRequete("Le backtest doit contenir les variantes pour l'Excel.")
     wb = Workbook()
+    tableau, ancre = _tableau_de_bord(wb, bt, dec, etat)
     _lisez_moi(wb, bt, dec, etat)
     _resultats(wb, bt)
     _variantes(wb, bt)
@@ -196,6 +359,7 @@ def construire_classeur(texte_csv: str, bt: dict, dec: dict, etat: dict) -> byte
     _serie(wb, bt)
     _poids(wb, bt)
     _prix(wb, texte_csv)
+    _graphiques(tableau, wb["Serie"], ancre, len(bt["series"]["dates"]))
     sortie = io.BytesIO()
     wb.save(sortie)
     return sortie.getvalue()

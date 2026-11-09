@@ -210,7 +210,7 @@ def test_excel(avec_prix):
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="moteur-etg-2026-10-30.xlsx"'
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert wb.sheetnames == ["Lisez-moi", "Resultats", "Variantes", "Decision", "Serie", "Poids", "Prix_cloture",
+    assert wb.sheetnames == ["Tableau de bord", "Lisez-moi", "Resultats", "Variantes", "Decision", "Serie", "Poids", "Prix_cloture",
                              "Prix_ouverture"]
     lisez = " ".join(str(c.value) for row in wb["Lisez-moi"].iter_rows() for c in row if c.value)
     assert "Yahoo" in lisez and "07/2023" in lisez and "non validés" in lisez
@@ -262,3 +262,38 @@ def test_etat_apres_import_puis_mise_a_jour_reflete_la_derniere_ecriture(avec_pr
     monkeypatch.setattr(prix, "telecharger", lambda *a, **k: (bruts_synthetiques(), {}))
     assert avec_prix.post("/api/prix").status_code == 200
     assert avec_prix.get("/api/etat").json()["source"] == "Yahoo Finance"
+
+
+def test_excel_reprend_exactement_le_site(avec_prix):
+    """Le tableau de bord de l'Excel affiche les mêmes chiffres que l'API du site, pour des paramètres modifiés."""
+    corps = {"vendredi": "2026-10-30", "top": 3, "tampon": 5, "filtre": False, "court": 8, "long": 39,
+             "debut": "2024-06-07", "detenus": ["Santé", "Banques"]}
+    bt = avec_prix.post("/api/backtest", json=corps).json()
+    dec = avec_prix.post("/api/decision", json=corps).json()
+    r = avec_prix.post("/api/excel", json=corps)
+    assert r.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames[0] == "Tableau de bord"
+    ws = wb["Tableau de bord"]
+    cellules = {c.coordinate: c.value for row in ws.iter_rows() for c in row if c.value is not None}
+    valeurs = list(cellules.values())
+    for cle in ("ann", "sharpe", "perte_max", "rotation"):
+        assert any(isinstance(v, float) and v == pytest.approx(bt["moteur"][cle], abs=1e-12) for v in valeurs), cle
+    for v in bt["variantes"]:
+        assert v["nom"] in valeurs
+        assert any(isinstance(x, float) and x == pytest.approx(v["mesures"]["sharpe"], abs=1e-12) for x in valeurs)
+    actions = [str(v) for v in valeurs if isinstance(v, str) and v.split(" ")[-1] in ("acheter", "garder", "vendre")]
+    assert len(actions) == sum(1 for l in dec["lignes"] if l["action"] != "—")
+    assert len(ws._charts) == 2
+    serie = wb["Serie"]
+    assert serie.max_row - 1 == len(bt["series"]["dates"])
+    assert serie.cell(serie.max_row, 2).value == pytest.approx(bt["series"]["moteur"][-1])
+    assert "Données réelles" not in " ".join(str(v) for v in valeurs)
+
+
+def test_changer_les_parametres_ne_donne_jamais_404(avec_prix):
+    for corps in ({"top": 3}, {"tampon": 4}, {"filtre": False}, {"utiliser_court": False}, {"univers": "9"},
+                  {"debut": "2024-06-07"}, {"court": 8, "long": 39}, {"detenus": []}, {"vendredi": "2026-10-23"}):
+        for route in ("/api/backtest", "/api/decision", "/api/excel"):
+            r = avec_prix.post(route, json=corps)
+            assert r.status_code == 200, (route, corps, r.status_code, r.text[:200])

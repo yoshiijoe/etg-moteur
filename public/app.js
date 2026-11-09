@@ -154,6 +154,17 @@ function afficherDecision(d) {
 let minuteurDecision = null;
 function planifierDecision() { clearTimeout(minuteurDecision); minuteurDecision = setTimeout(chargerDecision, 250); }
 
+/* Un paramètre du backtest a changé : on recalcule aussi le backtest affiché, pour que l'écran reste à jour. */
+let minuteurBacktest = null;
+function planifierBacktest() {
+  clearTimeout(minuteurBacktest);
+  minuteurBacktest = setTimeout(async () => {
+    if ($("resultats").hidden) return;
+    try { await lancerBacktest(); }
+    catch (e) { if (e.statut !== 401) message(e.message, true); }
+  }, 400);
+}
+
 async function chargerDecision() {
   try {
     afficherDecision(await (await post("/api/decision", parametres())).json());
@@ -202,9 +213,15 @@ function afficherBacktest(b) {
   }
 }
 
+/* Paramètres du backtest affiché : l'Excel doit toujours correspondre à l'écran. */
+let parametresAffiches = null;
+const memeParametres = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 async function lancerBacktest() {
-  const b = await (await post("/api/backtest", parametres())).json();
+  const p = parametres();
+  const b = await (await post("/api/backtest", p)).json();
   afficherBacktest(b);
+  parametresAffiches = p;
   message(`Backtest terminé : ${b.periode.semaines} semaines, du ${fDate(b.periode.debut)} au ${fDate(b.periode.fin)}.`);
 }
 
@@ -297,6 +314,7 @@ $("b-prix").addEventListener("click", () => avecChargement($("b-prix"), "Mise à
     texte += nouvelles > 0 ? `, ${nouvelles} nouvelle(s) semaine(s).` : ". Aucune nouvelle semaine : les prix étaient déjà à jour.";
   } else texte += ".";
   await chargerDecision();
+  if (!$("resultats").hidden) await lancerBacktest();
   message(texte);
 }));
 
@@ -306,7 +324,11 @@ $("b-backtest").addEventListener("click", () => avecChargement($("b-backtest"), 
 }));
 
 $("b-excel").addEventListener("click", () => avecChargement($("b-excel"), "Préparation…", async () => {
-  const reponse = await post("/api/excel", parametres());
+  clearTimeout(minuteurBacktest); clearTimeout(minuteurDecision);
+  const p = parametres();
+  if ($("resultats").hidden || !memeParametres(p, parametresAffiches)) await lancerBacktest();
+  await chargerDecision();
+  const reponse = await post("/api/excel", p);
   const blob = await reponse.blob();
   const nom = /filename="([^"]+)"/.exec(reponse.headers.get("Content-Disposition") || "")?.[1] || "moteur-etg.xlsx";
   const lien = document.createElement("a");
@@ -323,8 +345,9 @@ $("fichier-csv").addEventListener("change", (ev) => {
   avecChargement($("b-import"), "Import…", async () => {
     const e = await (await api("/api/importer", { method: "POST", headers: { "Content-Type": "text/csv" }, body: await fichier.text() })).json();
     afficherEtat(e);
-    message(`CSV importé : prix au ${fDate(e.dernier_vendredi)}`);
     await chargerDecision();
+    if (!$("resultats").hidden) await lancerBacktest();
+    message(`CSV importé : prix au ${fDate(e.dernier_vendredi)}`);
   });
 });
 
@@ -332,6 +355,7 @@ for (const id of ["vendredi"]) $(id).addEventListener("change", planifierDecisio
 $("form-parametres").addEventListener("change", (ev) => {
   if (ev.target.name === "univers") dessinerDetenus(ev.target.value === "10" ? ETF : ETF.filter((n) => n !== "Défense"));
   planifierDecision();
+  planifierBacktest();
 });
 $("form-parametres").addEventListener("submit", (ev) => ev.preventDefault());
 
